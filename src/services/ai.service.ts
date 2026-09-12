@@ -113,7 +113,7 @@ Contexto reciente de lo que dijeron:
 
 Instrucción:
 Haz una broma breve, cálida, pícara y divertida sobre ${targetName} (por ejemplo: que seguro está durmiendo como un tronco, que anda desaparecido, que le dio fiaquita o que se hace el importante).
-Usa modismos cordobeses ("de una", "a pleno", "fiera", "culiau", "fiaquita", "dormir como un tronco") y emojis (🐶, 😂, 😴, 🤪).
+Usa modismos cordobeses ("de una", "a pleno", "fiera", "fiaquita", "dormir como un tronco") y emojis (🐶, 😂, 😴, 🤪). No uses la palabra "culiau", y si usas "culia" que sea con probabilidad muy baja.
 Máximo 2 oraciones breves. Incluye la mención "@${targetName}" en el chiste.`;
 
     try {
