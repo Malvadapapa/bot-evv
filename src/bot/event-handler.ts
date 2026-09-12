@@ -23,6 +23,7 @@ export interface EventHandlerConfig {
   aiService: AIService;
   birthdayRepo?: BirthdayRepository;
   botCleanJid?: string;
+  botLid?: string;
   targetGroupJid?: string;
   userCooldownMs?: number;
   groupCooldownMs?: number;
@@ -93,13 +94,18 @@ export class EventHandler {
     const sock = this.config.getSocket();
     if (!sock) return;
 
-    // Resolver JID limpio del bot
+    // Resolver JID limpio del bot y su LID de WhatsApp
     const botFullId = sock.user?.id || '';
     const botCleanJid = this.config.botCleanJid || (botFullId ? botFullId.split(':')[0] + '@s.whatsapp.net' : '');
+    const botLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : (this.config.botLid || '');
+
+    const botPhoneNum = botCleanJid.split('@')[0];
+    const botLidNum = botLid ? botLid.split('@')[0] : '';
 
     // 5. Manejo de Comandos Explícitos (/resumen, /menciones, /marcar, /micumple, /top, /ayuda)
     if (this.config.commandService.isCommand(text)) {
       try {
+        console.log(`⚡ [Comando] De ${pushName} en ${remoteJid}: "${text}"`);
         const cmdResult = await this.config.commandService.executeCommand(
           remoteJid,
           senderJid,
@@ -124,18 +130,23 @@ export class EventHandler {
       return;
     }
 
-    // 6. REGLA 1: En grupos, activación conversacional ante @Bot explícito, cita directa o intervención espontánea
+    // 6. REGLA 1: En grupos, activación conversacional ante @Bot explícito (por JID, LID o texto), cita directa o intervención espontánea
     const isGroup = remoteJid.endsWith('@g.us');
     let isQuotingBot = false;
     const quoted = getQuotedContext(msg);
 
     if (isGroup) {
-      const isMentioned = botCleanJid
-        ? mentionedJids.some((j) => j.includes(botCleanJid.split('@')[0]))
-        : false;
+      const isMentioned =
+        (botPhoneNum && mentionedJids.some((j) => j.includes(botPhoneNum))) ||
+        (botLidNum && mentionedJids.some((j) => j.includes(botLidNum))) ||
+        /@(vector|mequetrefe|bot)\b/i.test(text);
 
       isQuotingBot = Boolean(
-        quoted?.participant && botCleanJid && quoted.participant.includes(botCleanJid.split('@')[0])
+        quoted?.participant &&
+        (
+          (botPhoneNum && quoted.participant.includes(botPhoneNum)) ||
+          (botLidNum && quoted.participant.includes(botLidNum))
+        )
       );
 
       // Si no fue mencionado ni citado en el grupo
@@ -151,8 +162,8 @@ export class EventHandler {
 
     // 7. Verificación de Cooldowns para interacción conversacional directa
     const now = Date.now();
-    const userCooldown = this.config.userCooldownMs ?? 15000;
-    const groupCooldown = this.config.groupCooldownMs ?? 5000;
+    const userCooldown = this.config.userCooldownMs ?? 8000;
+    const groupCooldown = this.config.groupCooldownMs ?? 2500;
 
     const lastUserTime = this.userCooldowns.get(senderJid) || 0;
     if (now - lastUserTime < userCooldown) {
@@ -171,6 +182,8 @@ export class EventHandler {
 
     // 8. Generar respuesta conversacional vía IA con contexto real y género
     try {
+      console.log(`🎯 [Interacción] ${pushName} habló con el bot en ${remoteJid}: "${text}"`);
+
       try {
         await sock.readMessages([msg.key]);
       } catch {}
@@ -178,19 +191,26 @@ export class EventHandler {
       await sock.sendPresenceUpdate('composing', remoteJid);
 
       // Limpiar texto de menciones directas
-      const cleanPrompt = text
-        .replace(new RegExp(`@${botCleanJid.split('@')[0]}`, 'gi'), '')
-        .replace(/@bot/gi, '')
+      let cleanPrompt = text;
+      if (botPhoneNum) cleanPrompt = cleanPrompt.replace(new RegExp(`@${botPhoneNum}`, 'gi'), '');
+      if (botLidNum) cleanPrompt = cleanPrompt.replace(new RegExp(`@${botLidNum}`, 'gi'), '');
+      cleanPrompt = cleanPrompt
+        .replace(/@(vector|mequetrefe|bot)\b/gi, '')
         .trim();
 
       // Obtener contexto de mensajes recientes del grupo (últimos 6)
       const recentStored = this.config.messageRepo.getRecentMessages(remoteJid, 6);
-      const recentHistory: ChatMessage[] = recentStored.map((m) => ({
-        role: botCleanJid && m.senderJid.includes(botCleanJid.split('@')[0]) ? 'assistant' : 'user',
-        senderName: m.senderName,
-        text: m.content,
-        timestamp: m.timestamp
-      }));
+      const recentHistory: ChatMessage[] = recentStored.map((m) => {
+        const isBotSender =
+          (botPhoneNum && m.senderJid.includes(botPhoneNum)) ||
+          (botLidNum && m.senderJid.includes(botLidNum));
+        return {
+          role: isBotSender ? 'assistant' : 'user',
+          senderName: m.senderName,
+          text: m.content,
+          timestamp: m.timestamp
+        };
+      });
 
       // Detectar preferencia de género/pronombre si existe
       const userProfile = this.config.birthdayRepo?.get(senderJid);
