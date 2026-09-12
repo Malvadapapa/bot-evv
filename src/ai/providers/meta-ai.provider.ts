@@ -34,6 +34,8 @@ export class MetaAIProvider implements AIProvider {
 
     const embeddedPrompt = buildMetaAIPrompt(prompt, historySummary, {
       userGender: options?.userGender,
+      userName: options?.userName,
+      isFlirting: options?.isFlirting,
       isReplyingToBotJoke: options?.isReplyingToBotJoke
     });
 

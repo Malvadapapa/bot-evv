@@ -121,4 +121,14 @@ export class MessageRepository {
     const row = stmt.get(groupJid, `%${namePart.toLowerCase()}%`) as { sender_jid: string } | undefined;
     return row?.sender_jid || null;
   }
+
+  public getMessageCountBySender(senderJid: string): number {
+    const stmt = this.db.sqlite.prepare(`
+      SELECT COUNT(*) as count
+      FROM messages
+      WHERE sender_jid = ?
+    `);
+    const row = stmt.get(senderJid) as { count: number } | undefined;
+    return row?.count || 0;
+  }
 }

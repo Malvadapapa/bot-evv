@@ -13,6 +13,8 @@ export interface GenerateReplyOptions {
   maxTokens?: number;
   systemPrompt?: string;
   userGender?: 'male' | 'female' | null;
+  userName?: string;
+  isFlirting?: boolean;
   isReplyingToBotJoke?: boolean;
 }
 

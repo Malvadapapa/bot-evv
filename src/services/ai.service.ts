@@ -82,11 +82,18 @@ export class AIService {
     prompt: string,
     senderName: string,
     recentHistory: ChatMessage[] = [],
-    options?: { userGender?: 'male' | 'female' | null; isReplyingToBotJoke?: boolean }
+    options?: {
+      userGender?: 'male' | 'female' | null;
+      userName?: string;
+      isFlirting?: boolean;
+      isReplyingToBotJoke?: boolean;
+    }
   ): Promise<string> {
     const formattedPrompt = `${senderName}: ${prompt}`;
     const result = await this.generateConversationReply(formattedPrompt, recentHistory, {
       userGender: options?.userGender,
+      userName: options?.userName || senderName,
+      isFlirting: options?.isFlirting,
       isReplyingToBotJoke: options?.isReplyingToBotJoke
     });
     return result.text;

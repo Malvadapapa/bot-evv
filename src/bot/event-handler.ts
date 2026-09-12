@@ -30,6 +30,7 @@ export interface EventHandlerConfig {
   dryRun?: boolean;
   spontaneousChance?: number;
   spontaneousCooldownMs?: number;
+  userOnboardingCooldownMs?: number;
 }
 
 export class EventHandler {
@@ -37,6 +38,7 @@ export class EventHandler {
   private userCooldowns = new Map<string, number>();
   private groupCooldowns = new Map<string, number>();
   private spontaneousCooldowns = new Map<string, number>();
+  private userOnboardingCooldowns = new Map<string, number>();
   private botJokeMsgIds = new Set<string>();
 
   constructor(private config: EventHandlerConfig) {}
@@ -226,16 +228,43 @@ export class EventHandler {
       // Detectar si el usuario está respondiendo a una broma que hizo el bot
       const isReplyingToBotJoke = Boolean(quoted?.stanzaId && this.botJokeMsgIds.has(quoted.stanzaId));
 
-      const aiReply = await this.config.aiService.generateGroupReply(
+      // Piropos sutiles y aleatorios para mujeres (~35% de probabilidad)
+      const isFlirting = userGender === 'female' && Math.random() < 0.35;
+
+      let aiReply = await this.config.aiService.generateGroupReply(
         remoteJid,
         cleanPrompt,
         pushName,
         recentHistory,
         {
           userGender,
+          userName: pushName,
+          isFlirting,
           isReplyingToBotJoke
         }
       );
+
+      // Onboarding proactivo: si no tiene registrado cumpleaños o género
+      const hasBirthday = Boolean(userProfile && userProfile.day > 0 && userProfile.month > 0);
+      const hasGender = Boolean(userProfile && (userProfile.gender === 'male' || userProfile.gender === 'female'));
+      const isProfileIncomplete = !hasBirthday || !hasGender;
+
+      if (isProfileIncomplete && this.config.birthdayRepo) {
+        const lastOnboardingPrompt = this.userOnboardingCooldowns.get(senderJid) || 0;
+        const onboardingCooldown = this.config.userOnboardingCooldownMs ?? 12 * 60 * 60 * 1000;
+        if (now - lastOnboardingPrompt >= onboardingCooldown) {
+          this.userOnboardingCooldowns.set(senderJid, now);
+          const msgCount = this.config.messageRepo.getMessageCountBySender(senderJid);
+          // msgCount <= 1 significa que es su primera interacción registrada
+          const isFirstTime = msgCount <= 1;
+
+          if (isFirstTime) {
+            aiReply += '\n\n🐶 *P.D.:* ¡Che, como es la primera vez que charlamos, me decís cuándo cumplís años y si preferís que te trate de él o ella así te tengo en mi lista? (tirame un `/micumple DD/MM [el/ella]`) 🎂✨';
+          } else {
+            aiReply += '\n\n🐶 *P.D.:* ¡Uh, sabés qué? Me actualizaron la base de datos en Excel (cosas de perro tecnológico 🐾💾) y se me traspapelaron tus datos... ¿cuándo cumplís y preferís que te trate de él o ella? Tirame un `/micumple DD/MM [el/ella]` así no te pierdo fiera!';
+          }
+        }
+      }
 
       try {
         await sock.sendPresenceUpdate('paused', remoteJid);

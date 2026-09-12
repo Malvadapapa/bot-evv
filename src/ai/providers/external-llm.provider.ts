@@ -45,6 +45,8 @@ export class ExternalLLMProvider implements AIProvider {
 
     const systemContent = options?.systemPrompt || buildSystemPrompt({
       userGender: options?.userGender,
+      userName: options?.userName,
+      isFlirting: options?.isFlirting,
       isReplyingToBotJoke: options?.isReplyingToBotJoke
     });
 

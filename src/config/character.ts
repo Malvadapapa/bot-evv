@@ -48,6 +48,8 @@ export const character: CharacterConfig = {
 
 export interface PromptOptions {
   userGender?: 'male' | 'female' | null;
+  userName?: string;
+  isFlirting?: boolean;
   isReplyingToBotJoke?: boolean;
 }
 
@@ -65,13 +67,26 @@ export function buildSystemPrompt(options?: PromptOptions): string {
   ];
 
   if (options?.userGender === 'female') {
-    parts.push('TRATO AL USUARIO: La persona con la que hablas prefiere ser tratada como mujer (ella, amiga, genia). Adapta tus adjetivos acordemente.');
+    if (options.isFlirting) {
+      parts.push(
+        'TRATO AL USUARIO (CUMPLIDO SUTIL Y DULCE): Estás hablando con una mujer y en este mensaje quieres tirarle un cumplido muy sutil, dulce y pícaro con simpatía cordobesa (ejemplos de tono sutil: "qué linda que estás hoy", "qué hermosa que te levantaste hoy reina", "con esa facha y encima tirando cuentas", "a una reina como vos no se la hace esperar"). Debe ser al paso, fino y sutil, jamás exagerado ni pesado. Responde lo que te pide o comenta con total precisión y naturalidad, sumando ese detalle galante y simpático.'
+      );
+    } else {
+      parts.push(
+        'TRATO AL USUARIO: La persona con la que hablas prefiere ser tratada como mujer (ella, reina, genia). Adapta tus adjetivos acordemente.'
+      );
+    }
   } else if (options?.userGender === 'male') {
-    parts.push('TRATO AL USUARIO: La persona con la que hablas prefiere ser tratada como hombre (él, amigo, fiera, compadre). Adapta tus adjetivos acordemente.');
+    const namePrefix = options.userName ? `Quien te habla se llama ${options.userName} y es hombre (él). ` : 'La persona con la que hablas prefiere ser tratada como hombre (él). ';
+    parts.push(
+      `TRATO AL USUARIO: ${namePrefix}Trátalo con buena onda y confianza de amigos, usando apodos de compinche como bro, maestro, bestia, animal, hermano, pana, fiera, compadre, capo o máquina (ej: "mirá bro...", "de una maestro", "dale animal", "qué hacés hermano").`
+    );
   }
 
   if (options?.isReplyingToBotJoke) {
-    parts.push('REGLA DE PICARDÍA: El usuario te está respondiendo o increpando por una broma que acabas de hacer sobre alguien del grupo. "Hacete el otro" / hacete el desentendido con picardía cordobesa y gracia, reconociendo que tiraste el chiste pero haciéndote el inocente (ej: "yo no fui fiera, me hackearon", "yo solo soy la mascota del grupo 😂🐶", "mirá que te voy a quemar así jajaja").');
+    parts.push(
+      'REGLA DE PICARDÍA: El usuario te está respondiendo o increpando por una broma que acabas de hacer sobre alguien del grupo. "Hacete el otro" / hacete el desentendido con picardía cordobesa y gracia, reconociendo que tiraste el chiste pero haciéndote el inocente (ej: "yo no fui fiera, me hackearon", "yo solo soy la mascota del grupo 😂🐶", "mirá que te voy a quemar así jajaja").'
+    );
   }
 
   return parts.join('\n\n');
@@ -88,9 +103,13 @@ export function buildMetaAIPrompt(
 ): string {
   let genderNote = '';
   if (options?.userGender === 'female') {
-    genderNote = ' Trata a quien te habla como mujer (ella).';
+    if (options.isFlirting) {
+      genderNote = ' Trata a quien te habla como mujer (ella) y tírale al paso un cumplido muy sutil, dulce y simpático con gracia cordobesa (ej: "qué linda que estás hoy", "qué hermosa te levantaste hoy reina", sutil y agradable sin exagerar).';
+    } else {
+      genderNote = ' Trata a quien te habla como mujer (ella, reina, genia).';
+    }
   } else if (options?.userGender === 'male') {
-    genderNote = ' Trata a quien te habla como hombre (él).';
+    genderNote = ' Trata a quien te habla como hombre (él) con confianza usando apodos como bro, maestro, bestia, animal, hermano, pana, fiera o capo.';
   }
 
   let jokeNote = '';
