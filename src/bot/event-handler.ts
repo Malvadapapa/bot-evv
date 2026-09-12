@@ -135,11 +135,20 @@ export class EventHandler {
     let isQuotingBot = false;
     const quoted = getQuotedContext(msg);
 
+    // Lista de nombres dinámicos de respaldo en texto plano (@Perfil, @Mequetrefe, etc.)
+    const profileName = sock.user?.name || '';
+    const dynamicNames = Array.from(
+      new Set([character.displayName, character.keyName, profileName, 'bot', 'vector'])
+    ).filter((n) => Boolean(n && n.trim().length > 1));
+    const nameRegex = new RegExp(`@(${dynamicNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+
     if (isGroup) {
       const isMentioned =
+        // Detección nativa de WhatsApp por JID telefónico o LID de la cuenta
         (botPhoneNum && mentionedJids.some((j) => j.includes(botPhoneNum))) ||
         (botLidNum && mentionedJids.some((j) => j.includes(botLidNum))) ||
-        /@(vector|mequetrefe|bot)\b/i.test(text);
+        // Detección de respaldo por texto plano
+        nameRegex.test(text);
 
       isQuotingBot = Boolean(
         quoted?.participant &&
@@ -194,9 +203,7 @@ export class EventHandler {
       let cleanPrompt = text;
       if (botPhoneNum) cleanPrompt = cleanPrompt.replace(new RegExp(`@${botPhoneNum}`, 'gi'), '');
       if (botLidNum) cleanPrompt = cleanPrompt.replace(new RegExp(`@${botLidNum}`, 'gi'), '');
-      cleanPrompt = cleanPrompt
-        .replace(/@(vector|mequetrefe|bot)\b/gi, '')
-        .trim();
+      cleanPrompt = cleanPrompt.replace(nameRegex, '').trim();
 
       // Obtener contexto de mensajes recientes del grupo (últimos 6)
       const recentStored = this.config.messageRepo.getRecentMessages(remoteJid, 6);
