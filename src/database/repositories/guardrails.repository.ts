@@ -254,6 +254,19 @@ export class GuardrailsRepository {
     return stmt.all(now) as unknown as GroupJoinRequest[];
   }
 
+  public getAllPendingRequests(): GroupJoinRequest[] {
+    const stmt = this.db.sqlite.prepare(`
+      SELECT
+        id, group_jid as groupJid, group_name as groupName,
+        invited_by_jid as invitedByJid, invited_by_phone as invitedByPhone,
+        status, created_at as createdAt, expires_at as expiresAt
+      FROM group_join_requests
+      WHERE status = 'pending'
+      ORDER BY created_at DESC
+    `);
+    return stmt.all() as unknown as GroupJoinRequest[];
+  }
+
   // ============================================================
   // 5. Rate Limiting de Comandos y Auditoría (command_audit_log)
   // ============================================================

@@ -289,6 +289,10 @@ export class GuardrailsService {
     return this.guardrailsRepo.getPendingRequestByGroup(groupJid);
   }
 
+  public getAllPendingRequests(): GroupJoinRequest[] {
+    return this.guardrailsRepo.getAllPendingRequests();
+  }
+
   public authorizeGroup(groupJid: string, groupName: string, authorizedBy: string = 'admin'): void {
     this.guardrailsRepo.authorizeGroup(groupJid, groupName, authorizedBy, false);
   }

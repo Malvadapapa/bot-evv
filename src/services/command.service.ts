@@ -446,7 +446,22 @@ export class CommandService {
               };
             }
           } else {
-            return { handled: true, replyText: '⚠️ Uso: */aprobar <id_solicitud>* (ej: /aprobar SOL-101)' };
+            const pendingList = this.guardrailsService.getAllPendingRequests();
+            if (pendingList.length === 0) {
+              return { handled: true, replyText: '📋 No hay solicitudes de ingreso pendientes en este momento.' };
+            }
+            if (pendingList.length === 1) {
+              requestId = pendingList[0].id;
+            } else {
+              const lines = [
+                '📋 *SOLICITUDES DE GRUPO PENDIENTES:*',
+                '---------------------------------------'
+              ];
+              for (const req of pendingList) {
+                lines.push(`• *${req.id}*: "${req.groupName}"\n  👉 Para aprobar: */aprobar ${req.id}*`);
+              }
+              return { handled: true, replyText: lines.join('\n') };
+            }
           }
         }
         const res = this.guardrailsService.approveGroupJoinRequest(requestId, senderJid);
