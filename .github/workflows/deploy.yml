@@ -11,6 +11,11 @@ jobs:
       - name: Actualizar, compilar y reiniciar bot
         shell: powershell
         run: |
+          # 1. Configurar safe directory y PATH de herramientas globales
+          git config --global --add safe.directory *
+          $env:PATH = "C:\Program Files\nodejs;C:\Users\Administrador\AppData\Roaming\npm;$env:PATH"
+
+          # 2. Localizar directorio del bot
           $paths = @("C:\bot-evv", "C:\Users\Administrador\bot-evv", "$env:USERPROFILE\bot-evv")
           $target = $null
           foreach ($p in $paths) {
@@ -27,15 +32,18 @@ jobs:
           Write-Host "Directorio encontrado: $target"
           Set-Location $target
 
+          # 3. Descargar cambios
           Write-Host "Descargando ultimos cambios de main..."
           git pull origin main
 
-          Write-Host "Instalando dependencias si hubo cambios..."
+          # 4. Instalar y compilar
+          Write-Host "Instalando dependencias..."
           npm install
 
           Write-Host "Compilando TypeScript..."
           npm run build
 
+          # 5. Reiniciar servicio en PM2
           Write-Host "Reiniciando bot en PM2..."
           pm2 restart bot-evv
           Write-Host "Despliegue automatico completado con exito!"
