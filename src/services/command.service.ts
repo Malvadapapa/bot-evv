@@ -430,9 +430,24 @@ export class CommandService {
         if (!this.guardrailsService) {
           return { handled: true, replyText: '⚠️ Servicio de guardrails no configurado.' };
         }
-        const requestId = args[0]?.trim();
+        let requestId = args[0]?.trim();
         if (!requestId) {
-          return { handled: true, replyText: '⚠️ Uso: */aprobar <id_solicitud>* (ej: /aprobar SOL-101)' };
+          if (groupJid.endsWith('@g.us')) {
+            const pending = this.guardrailsService.getPendingRequestByGroup(groupJid);
+            if (pending) {
+              requestId = pending.id;
+            } else {
+              this.guardrailsService.authorizeGroup(groupJid, 'Grupo Aprobado por Administrador', senderJid);
+              return {
+                handled: true,
+                replyText: '✅ ¡Grupo autorizado exitosamente por el Administrador! Mequetrefe ya está activo en este grupo.',
+                action: 'group_approved',
+                actionGroupJid: groupJid
+              };
+            }
+          } else {
+            return { handled: true, replyText: '⚠️ Uso: */aprobar <id_solicitud>* (ej: /aprobar SOL-101)' };
+          }
         }
         const res = this.guardrailsService.approveGroupJoinRequest(requestId, senderJid);
         return {

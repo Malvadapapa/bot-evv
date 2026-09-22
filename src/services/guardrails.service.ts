@@ -33,9 +33,18 @@ export class GuardrailsService {
     // Sembrar administradores iniciales desde .env / config
     if (config?.initialAdminSuffixes && config.initialAdminSuffixes.length > 0) {
       for (const suffix of config.initialAdminSuffixes) {
-        const clean = suffix.trim().replace(/\D/g, '');
+        const trimmed = suffix.trim();
+        const clean = trimmed.replace(/\D/g, '');
         if (clean) {
-          this.guardrailsRepo.addAdmin(clean, `${clean}@s.whatsapp.net`, 'env-initial');
+          let jid: string = `${clean}@s.whatsapp.net`;
+          if (trimmed.includes('@')) {
+            jid = trimmed;
+          } else if (clean.length >= 14 && !clean.startsWith('54')) {
+            jid = `${clean}@lid`;
+          } else if (clean.length < 8) {
+            jid = '';
+          }
+          this.guardrailsRepo.addAdmin(clean, jid, 'env-initial');
         }
       }
     }
@@ -274,6 +283,14 @@ export class GuardrailsService {
 
   public markIntroSent(groupJid: string): void {
     this.guardrailsRepo.markIntroSent(groupJid);
+  }
+
+  public getPendingRequestByGroup(groupJid: string): GroupJoinRequest | null {
+    return this.guardrailsRepo.getPendingRequestByGroup(groupJid);
+  }
+
+  public authorizeGroup(groupJid: string, groupName: string, authorizedBy: string = 'admin'): void {
+    this.guardrailsRepo.authorizeGroup(groupJid, groupName, authorizedBy, false);
   }
 
   public createGroupJoinRequest(

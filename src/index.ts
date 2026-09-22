@@ -256,7 +256,7 @@ async function startBot(): Promise<void> {
 
         console.log(`🛡️ [Guardrails] Bot agregado a grupo no autorizado: "${groupName}" (${groupJid}). Solicitud: ${joinReq.id}`);
 
-        const adminJids = guardrailsService.getAllAdmins().map((a) => a.jid).filter((jid): jid is string => Boolean(jid));
+        const adminJids = guardrailsService.getAllAdmins().map((a) => a.jid).filter((jid): jid is string => typeof jid === 'string' && jid.includes('@'));
         const alertMsg = [
           '🔔 *SOLICITUD DE INGRESO A NUEVO GRUPO*',
           '---------------------------------------',

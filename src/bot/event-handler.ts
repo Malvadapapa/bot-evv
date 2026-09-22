@@ -67,6 +67,7 @@ export class EventHandler {
     const isGroup = remoteJid.endsWith('@g.us');
     const text = getMessageText(msg).trim();
     const senderJid = getSenderJid(msg);
+    const pushName = msg.pushName || 'Usuario';
 
     // Evitar bucle si el sender coincide con el JID del bot
     if (this.config.botCleanJid && senderJid === this.config.botCleanJid) {
@@ -95,11 +96,17 @@ export class EventHandler {
         : (!this.config.targetGroupJid || remoteJid === this.config.targetGroupJid);
 
       if (!isAuthorized) {
-        return;
+        // Excepción: Si quien escribe es admin y está ejecutando /aprobar en este grupo, permitirlo
+        const isAdmin = this.config.commandService.checkAdminPermission(senderJid, pushName);
+        const isApproving = text.startsWith('/aprobar') || text.startsWith('!aprobar');
+        if (isAdmin && isApproving) {
+          // Continuar hacia el CommandService para autorizarlo directamente
+        } else {
+          return;
+        }
       }
     }
 
-    const pushName = msg.pushName || 'Usuario';
     const rawTimestamp = msg.messageTimestamp;
     const timestamp = typeof rawTimestamp === 'number'
       ? (rawTimestamp < 1e11 ? rawTimestamp * 1000 : rawTimestamp)
