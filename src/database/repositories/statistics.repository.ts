@@ -34,4 +34,21 @@ export class StatisticsRepository {
     `);
     return stmt.all(groupJid, limit) as unknown as UserActivityStat[];
   }
+
+  public getInactiveMembers(
+    groupJid: string,
+    thresholdMs: number,
+    limit: number = 20
+  ): UserActivityStat[] {
+    const cutoffTime = Date.now() - thresholdMs;
+    const stmt = this.db.sqlite.prepare(`
+      SELECT group_jid as groupJid, user_jid as userJid, user_name as userName,
+             message_count as messageCount, last_message_at as lastMessageAt
+      FROM user_statistics
+      WHERE group_jid = ? AND last_message_at < ?
+      ORDER BY last_message_at ASC
+      LIMIT ?
+    `);
+    return stmt.all(groupJid, cutoffTime, limit) as unknown as UserActivityStat[];
+  }
 }

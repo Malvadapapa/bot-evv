@@ -16,6 +16,8 @@ export interface GenerateReplyOptions {
   userName?: string;
   isFlirting?: boolean;
   isReplyingToBotJoke?: boolean;
+  personalityDirective?: string;
+  rawPrompt?: boolean;
 }
 
 export interface AIProvider {

@@ -8,3 +8,6 @@ export * from './news.service.js';
 export * from './inactivity.service.js';
 export * from './command.service.js';
 export * from './scheduler.service.js';
+export * from './weather.service.js';
+export * from './horoscope.service.js';
+export * from './guardrails.service.js';

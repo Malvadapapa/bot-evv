@@ -19,7 +19,9 @@ import {
   BirthdayRepository,
   StatisticsRepository,
   JobExecutionRepository,
-  NewsRepository
+  NewsRepository,
+  HoroscopeRepository,
+  GuardrailsRepository
 } from './database/index.js';
 import { MetaAIProvider } from './ai/providers/meta-ai.provider.js';
 import { ExternalLLMProvider } from './ai/providers/external-llm.provider.js';
@@ -34,6 +36,9 @@ import {
   NewsService,
   CommandService,
   SchedulerService,
+  WeatherService,
+  HoroscopeService,
+  GuardrailsService,
   type SchedulerTargetAdapter
 } from './services/index.js';
 import { EventHandler } from './bot/event-handler.js';
@@ -53,6 +58,8 @@ const birthdayRepo = new BirthdayRepository(db);
 const statsRepo = new StatisticsRepository(db);
 const jobExecutionRepo = new JobExecutionRepository(db);
 const newsRepo = new NewsRepository(db);
+const horoscopeRepo = new HoroscopeRepository(db);
+const guardrailsRepo = new GuardrailsRepository(db);
 
 // 3. Configuración de Proveedores de IA
 const metaAiProvider = new MetaAIProvider(env.META_AI_BRIDGE_URL, env.META_AI_TIMEOUT_MS);
@@ -70,20 +77,18 @@ const mentionService = new MentionService(mentionRepo);
 const contextMarkerService = new ContextMarkerService(mentionRepo, messageRepo);
 const birthdayService = new BirthdayService(birthdayRepo, jobExecutionRepo, aiService);
 const statisticsService = new StatisticsService(statsRepo);
-const newsService = new NewsService(newsRepo);
+const newsService = new NewsService(newsRepo, aiService);
+const weatherService = new WeatherService();
+const horoscopeService = new HoroscopeService(horoscopeRepo, env.TIMEZONE);
 const inactivityService = new InactivityService(messageRepo, statsRepo, aiService, {
   thresholdMs: env.INACTIVITY_THRESHOLD_HOURS * 3600000,
   cooldownMs: env.INACTIVITY_COOLDOWN_HOURS * 3600000,
-  mentionTopActive: true
+  mentionTopActive: true,
+  timezone: env.TIMEZONE,
+  inactiveDaysThreshold: env.INACTIVE_MEMBER_ALERT_DAYS,
+  maxGhostAlertsPerDay: env.MAX_GHOST_ALERTS_PER_DAY,
+  ghostAlertCooldownMs: env.GHOST_ALERT_COOLDOWN_HOURS * 3600000
 });
-
-const commandService = new CommandService(
-  summaryService,
-  mentionService,
-  contextMarkerService,
-  birthdayService,
-  statisticsService
-);
 
 // 5. Adapter y Servicio de Automatización / Scheduler (00:00, 09:00, 12:00, Inactividad)
 const schedulerAdapter: SchedulerTargetAdapter = {
@@ -111,9 +116,31 @@ const scheduler = new SchedulerService(
   birthdayService,
   inactivityService,
   newsService,
+  weatherService,
+  aiService,
   jobExecutionRepo,
   schedulerAdapter,
   env.TIMEZONE
+);
+
+const guardrailsService = new GuardrailsService(guardrailsRepo, {
+  botInstanceId: 'bot-principal',
+  initialAdminSuffixes: env.ADMIN_PHONE_SUFFIX.split(',').map((s) => s.trim()),
+  targetGroupJid: env.TARGET_GROUP_JID
+});
+
+const commandService = new CommandService(
+  summaryService,
+  mentionService,
+  contextMarkerService,
+  birthdayService,
+  statisticsService,
+  scheduler,
+  newsService,
+  horoscopeService,
+  aiService,
+  env.ADMIN_PHONE_SUFFIX,
+  guardrailsService
 );
 
 // 6. Router de Eventos y Mensajes (Regla 1: activado ante @Bot, cita o intervención espontánea sobre miembros clave)
@@ -124,12 +151,14 @@ const eventHandler = new EventHandler({
   statsRepo,
   commandService,
   aiService,
+  guardrailsService,
   birthdayRepo,
   targetGroupJid: env.TARGET_GROUP_JID,
   userCooldownMs: env.COOLDOWN_USER_MS,
   groupCooldownMs: env.COOLDOWN_GROUP_MS,
   spontaneousChance: env.SPONTANEOUS_CHANCE,
   spontaneousCooldownMs: env.SPONTANEOUS_COOLDOWN_MINUTES * 60000,
+  spontaneousMessageInterval: env.SPONTANEOUS_MESSAGE_INTERVAL,
   dryRun: env.DRY_RUN
 });
 
@@ -199,6 +228,60 @@ async function startBot(): Promise<void> {
     }
   });
 
+  // Listener de incorporación a grupos con flujo de autorización (Guardrails)
+  sock.ev.on('group-participants.update', async (update) => {
+    if (update.action !== 'add') return;
+
+    const botFullId = sock.user?.id || '';
+    const botCleanJid = botFullId ? botFullId.split(':')[0] + '@s.whatsapp.net' : '';
+    const botPhone = botCleanJid.split('@')[0];
+    const botLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : '';
+    const botLidNum = botLid ? botLid.split('@')[0] : '';
+
+    const isBotAdded = update.participants.some(
+      (p) => (botPhone && p.includes(botPhone)) || (botLidNum && p.includes(botLidNum))
+    );
+
+    if (isBotAdded) {
+      const groupJid = update.id;
+      if (!guardrailsService.isGroupAuthorized(groupJid)) {
+        let groupName = 'Grupo nuevo de WhatsApp';
+        try {
+          const meta = await sock.groupMetadata(groupJid);
+          if (meta?.subject) groupName = meta.subject;
+        } catch {}
+
+        const inviter = (update as any).author || 'desconocido';
+        const joinReq = guardrailsService.createGroupJoinRequest(groupJid, groupName, inviter);
+
+        console.log(`🛡️ [Guardrails] Bot agregado a grupo no autorizado: "${groupName}" (${groupJid}). Solicitud: ${joinReq.id}`);
+
+        const adminJids = guardrailsService.getAllAdmins().map((a) => a.jid).filter((jid): jid is string => Boolean(jid));
+        const alertMsg = [
+          '🔔 *SOLICITUD DE INGRESO A NUEVO GRUPO*',
+          '---------------------------------------',
+          `📌 *Grupo:* ${groupName}`,
+          `🆔 *JID:* ${groupJid}`,
+          `🔢 *Solicitud:* ${joinReq.id}`,
+          '',
+          `⏳ *Tenés 12 horas para responder:*`,
+          `• Para autorizar: */aprobar ${joinReq.id}*`,
+          `• Para rechazar y salir: */rechazar ${joinReq.id}*`,
+          '',
+          `_Si no se aprueba en 12 horas, el bot abandonará el grupo automáticamente._`
+        ].join('\n');
+
+        for (const adminJid of adminJids) {
+          try {
+            await sock.sendMessage(adminJid, { text: alertMsg });
+          } catch (err: any) {
+            console.warn(`⚠️ [Guardrails] Error enviando alerta a admin ${adminJid}:`, err?.message || err);
+          }
+        }
+      }
+    }
+  });
+
   // Procesamiento de mensajes entrantes con ingestión pasiva + enrutador modular
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
@@ -209,8 +292,39 @@ async function startBot(): Promise<void> {
   });
 }
 
+let groupExpirationInterval: NodeJS.Timeout | null = null;
+groupExpirationInterval = setInterval(async () => {
+  if (!currentSocket) return;
+  try {
+    const expiredList = guardrailsService.getExpiredGroupRequests();
+    for (const req of expiredList) {
+      console.log(`⏰ [Guardrails] Solicitud ${req.id} para "${req.groupName}" expiró tras 12h. Abandonando grupo...`);
+      guardrailsService.expireGroupRequest(req.id);
+      try {
+        await currentSocket.groupLeave(req.groupJid);
+        console.log(`👋 [Guardrails] Bot abandonó el grupo expirado: ${req.groupJid}`);
+      } catch (e: any) {
+        console.warn(`⚠️ [Guardrails] Error saliendo de grupo expirado:`, e?.message || e);
+      }
+
+      const adminJids = guardrailsService.getAllAdmins().map((a) => a.jid).filter((jid): jid is string => Boolean(jid));
+      const notice = `⏳ *SOLICITUD EXPIRADA*\nLa solicitud *${req.id}* para el grupo "${req.groupName}" no fue aprobada en 12 horas. El bot abandonó el grupo automáticamente.`;
+      for (const adminJid of adminJids) {
+        try {
+          await currentSocket.sendMessage(adminJid, { text: notice });
+        } catch {}
+      }
+    }
+  } catch (err: any) {
+    console.error('❌ Error verificando solicitudes expiradas:', err?.message || err);
+  }
+}, 5 * 60 * 1000);
+
 function handleShutdown(signal: string) {
   console.log(`\n🛑 Recibida señal ${signal}. Cerrando bot de forma ordenada...`);
+  if (groupExpirationInterval) {
+    clearInterval(groupExpirationInterval);
+  }
   scheduler.stop();
   db.close();
   if (currentSocket) {

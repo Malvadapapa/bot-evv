@@ -54,31 +54,31 @@ export class BirthdayService {
   /**
    * Obtiene los usuarios que cumplen años hoy en Córdoba
    */
-  public getTodayBirthdays() {
-    const { day, month } = getCordobaDayAndMonth();
+  public getTodayBirthdays(date?: Date) {
+    const { day, month } = getCordobaDayAndMonth(date);
     return this.birthdayRepo.getByDate(day, month);
   }
 
   /**
    * Obtiene los usuarios que cumplen años mañana en Córdoba
    */
-  public getTomorrowBirthdays() {
-    const { day, month } = getTomorrowCordobaDayAndMonth();
+  public getTomorrowBirthdays(date?: Date) {
+    const { day, month } = getTomorrowCordobaDayAndMonth(date);
     return this.birthdayRepo.getByDate(day, month);
   }
 
   /**
    * Genera el mensaje de felicitación para los cumpleañeros de hoy (idempotente)
    */
-  public async getTodayCelebrationMessage(groupJid: string): Promise<string | null> {
-    const today = getTodayCordoba();
+  public async getTodayCelebrationMessage(groupJid: string, date?: Date): Promise<string | null> {
+    const today = getTodayCordoba(date);
     const jobKey = `birthday_today:${groupJid}:${today}`;
 
     if (this.jobExecutionRepo.isJobExecuted(jobKey)) {
       return null;
     }
 
-    const celebrants = this.getTodayBirthdays();
+    const celebrants = this.getTodayBirthdays(date);
     if (celebrants.length === 0) return null;
 
     const messages: string[] = [];
@@ -96,15 +96,15 @@ export class BirthdayService {
   /**
    * Genera el aviso de cumpleaños de mañana (idempotente)
    */
-  public getTomorrowAdvanceNotification(groupJid: string): string | null {
-    const today = getTodayCordoba();
+  public getTomorrowAdvanceNotification(groupJid: string, date?: Date): string | null {
+    const today = getTodayCordoba(date);
     const jobKey = `birthday_tomorrow_advance:${groupJid}:${today}`;
 
     if (this.jobExecutionRepo.isJobExecuted(jobKey)) {
       return null;
     }
 
-    const celebrants = this.getTomorrowBirthdays();
+    const celebrants = this.getTomorrowBirthdays(date);
     if (celebrants.length === 0) return null;
 
     const mentions = celebrants

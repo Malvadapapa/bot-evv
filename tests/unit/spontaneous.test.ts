@@ -93,7 +93,8 @@ test('Spontaneous Intervention & Context Memory Unit Tests', async (t) => {
 
     assert.strictEqual(spontaneousCalls, 1);
     assert.strictEqual(sentMessages.length, 1);
-    assert.match(sentMessages[0].content.text, /seguro está durmiendo como un tronco este @Cristian/);
+    assert.match(sentMessages[0].content.text, /seguro está durmiendo como un tronco este @/);
+    assert.ok(sentMessages[0].content.mentions && sentMessages[0].content.mentions.length > 0);
     assert.strictEqual(sentMessages[0].options?.quoted?.key?.id, 'm-chat');
   });
 

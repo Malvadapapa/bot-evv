@@ -2,7 +2,7 @@ import { MetaAIProvider } from '../ai/providers/meta-ai.provider.js';
 import { ExternalLLMProvider } from '../ai/providers/external-llm.provider.js';
 import type { ChatMessage } from '../ai/types.js';
 import type { StoredMessage } from '../database/repositories/message.repository.js';
-import { character } from '../config/character.js';
+import { character, formatWhatsAppText } from '../config/character.js';
 
 export interface AIServiceConfig {
   metaProvider?: MetaAIProvider;
@@ -12,6 +12,7 @@ export interface AIServiceConfig {
 export class AIService {
   private metaProvider?: MetaAIProvider;
   private externalProvider?: ExternalLLMProvider;
+  private isMetaAiBusy: boolean = false;
 
   constructor(config: AIServiceConfig) {
     this.metaProvider = config.metaProvider;
@@ -28,8 +29,9 @@ export class AIService {
 
   /**
    * Genera una respuesta conversacional cotidiana.
-   * Prioridad 1: Meta AI Bridge (gratuito)
-   * Prioridad 2: Fallback externo (Groq / OpenRouter)
+   * Concurrencia inteligente: si Meta AI está ocupado (demora 7-8s),
+   * deriva inmediatamente en paralelo al proveedor externo (Groq / OpenRouter, ~400ms)
+   * para no descartar ni retrasar ningún mensaje.
    */
   public async generateConversationReply(
     prompt: string,
@@ -41,14 +43,29 @@ export class AIService {
     let providerUsed = '';
     let lastError: Error | undefined;
 
-    // 1. Intentar con Meta AI si está configurado
-    if (this.metaProvider && this.metaProvider.isConfigured) {
+    // Concurrencia: si Meta AI está ocupado con otra solicitud y hay proveedor externo configurado,
+    // respondemos en paralelo de inmediato por el proveedor externo.
+    if (this.isMetaAiBusy && this.externalProvider && this.externalProvider.isConfigured) {
+      console.log(`⚡ [AIService] Meta AI ocupado con otra solicitud. Derivando concurrentemente a ${this.externalProvider.name} en paralelo.`);
+      try {
+        reply = await this.externalProvider.generateReply(prompt, history, options);
+        providerUsed = `${this.externalProvider.name}-concurrent`;
+      } catch (err: any) {
+        console.warn(`⚠️ [AIService] Fallback concurrente falló: ${err?.message || err}. Esperando a Meta AI.`);
+      }
+    }
+
+    // 1. Intentar con Meta AI si no se respondió concurrentemente y está configurado
+    if (!reply && this.metaProvider && this.metaProvider.isConfigured) {
+      this.isMetaAiBusy = true;
       try {
         reply = await this.metaProvider.generateReply(prompt, history, options);
         providerUsed = this.metaProvider.name;
       } catch (err: any) {
         lastError = err;
         console.warn(`⚠️ [AIService] Meta AI falló: ${err?.message || err}. Pasando a fallback.`);
+      } finally {
+        this.isMetaAiBusy = false;
       }
     }
 
@@ -68,7 +85,7 @@ export class AIService {
     }
 
     return {
-      text: reply.trim(),
+      text: formatWhatsAppText(reply),
       providerUsed,
       latencyMs: Date.now() - startTime
     };
@@ -87,6 +104,7 @@ export class AIService {
       userName?: string;
       isFlirting?: boolean;
       isReplyingToBotJoke?: boolean;
+      personalityDirective?: string;
     }
   ): Promise<string> {
     const formattedPrompt = `${senderName}: ${prompt}`;
@@ -94,7 +112,8 @@ export class AIService {
       userGender: options?.userGender,
       userName: options?.userName || senderName,
       isFlirting: options?.isFlirting,
-      isReplyingToBotJoke: options?.isReplyingToBotJoke
+      isReplyingToBotJoke: options?.isReplyingToBotJoke,
+      personalityDirective: options?.personalityDirective
     });
     return result.text;
   }
@@ -104,29 +123,39 @@ export class AIService {
    */
   public async generateSpontaneousIntervention(
     targetName: string,
-    recentContext: string
+    recentContext: string,
+    isFemale: boolean = false
   ): Promise<string> {
+    const instruction = isFemale
+      ? `Haz un comentario breve, simpático y pícaro halagando a ${targetName} con admiración cordobesa (por ejemplo: que si hablan de la reina del grupo avisen que te peinás, que llegó la jefa del grupo o que andan todos pendientes de ella). Tono compinche, dulce y divertido con emojis (🐶, ✨, 👑). Máximo 2 oraciones breves. Incluye la mención "@${targetName}".`
+      : `Haz una broma breve, cálida y divertida sobre ${targetName} (por ejemplo: que seguro está durmiendo como un tronco, que anda desaparecido, que le dio fiaquita o que se hace el importante). Tono natural y relajado con emojis (🐶, 😂, 😴). No satures de modismos ni uses "culiau". Máximo 2 oraciones breves. Incluye la mención "@${targetName}" en el chiste.`;
+
     const prompt = `Eres Mequetrefe, la mascota cordobesa oficial del grupo de WhatsApp.
 En el grupo acaban de nombrar o hablar sobre ${targetName}.
 Contexto reciente de lo que dijeron:
 "${recentContext}"
 
 Instrucción:
-Haz una broma breve, cálida y divertida sobre ${targetName} (por ejemplo: que seguro está durmiendo como un tronco, que anda desaparecido, que le dio fiaquita o que se hace el importante).
-Tono natural y relajado con emojis (🐶, 😂, 😴). No satures de modismos ni uses "culiau".
-Máximo 2 oraciones breves. Incluye la mención "@${targetName}" en el chiste.`;
+${instruction}`;
 
     try {
-      if (this.metaProvider && this.metaProvider.isConfigured) {
-        return (await this.metaProvider.generateReply(prompt, [])).trim();
+      if (!this.isMetaAiBusy && this.metaProvider && this.metaProvider.isConfigured) {
+        this.isMetaAiBusy = true;
+        try {
+          return formatWhatsAppText(await this.metaProvider.generateReply(prompt, []));
+        } finally {
+          this.isMetaAiBusy = false;
+        }
       }
       if (this.externalProvider && this.externalProvider.isConfigured) {
-        return (await this.externalProvider.generateReply(prompt, [], { maxTokens: 250 })).trim();
+        return formatWhatsAppText(await this.externalProvider.generateReply(prompt, [], { maxTokens: 250 }));
       }
     } catch {}
 
     // Fallback simpático garantizado
-    return `¡Epa che! Hablando de ${targetName}... seguro está durmiendo como un tronco este @${targetName} a esta hora 😂🐶😴`;
+    return isFemale
+      ? `¡Epa, si hablan de la reina del grupo avisen que me pongo la mejor pilcha! Firme acá a la orden @${targetName} 🐶👑`
+      : `Epa che! Hablando de ${targetName}... seguro está durmiendo como un tronco este @${targetName} a esta hora 😂🐶😴`;
   }
 
   /**
@@ -213,15 +242,31 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
   }
 
   /**
-   * Genera un mensaje de reactivación por inactividad
+   * Genera un mensaje de reactivación por inactividad sin repetición de temas
    */
-  public async generateInactivityNudge(recentContext: string, targetUserName?: string): Promise<string> {
-    let prompt = `El grupo de WhatsApp ha estado inactivo durante varias horas. Genera un mensaje ocurrente, divertido y cercano para reactivar la charla. Máximo 2 oraciones y con emojis.`;
-    if (targetUserName) {
-      prompt += ` Puedes mencionar con humor a @${targetUserName} preguntándole en qué anda.`;
+  public async generateInactivityNudge(
+    freshContext?: string,
+    targetMention?: { phone: string; name: string }
+  ): Promise<string> {
+    const angleTypes = [
+      'humor_silencio',
+      'debate_random',
+      'chicana_compinche'
+    ];
+    const chosenAngle = angleTypes[Math.floor(Math.random() * angleTypes.length)];
+
+    let prompt = `El grupo de WhatsApp lleva varias horas en silencio total. Genera un mensaje compinche, ocurrente y divertido para reactivar la conversación como la mascota del grupo. Máximo 2 oraciones breves y con emojis.`;
+
+    if (targetMention) {
+      prompt += ` Menciona puntualmente a @${targetMention.phone} (¡usa exactamente "@${targetMention.phone}" para que WhatsApp active el tag!) preguntándole en qué anda o tirándole una chicana sana.`;
     }
-    if (recentContext) {
-      prompt += ` Contexto de lo que hablaban antes: "${recentContext}".`;
+
+    if (freshContext && freshContext.trim().length > 0) {
+      prompt += ` Tema reciente del que charlaban: "${freshContext}". Puedes retomarlo con gracia.`;
+    } else if (chosenAngle === 'debate_random') {
+      prompt += ` Abre un debate random o pregunta cotidiana picante para que todos salten a opinar (ej: debate gastronómico argentino, series, música, clima, mate dulce vs amargo, etc.).`;
+    } else {
+      prompt += ` Haz un chiste sobre el silencio absoluto del grupo (ej: si se quedaron sin señal, si se durmieron todos, si están esperando que hable el otro, o si parecen un desierto). No hables de comida ni de hambre salvo que el contexto lo pida explícitamente.`;
     }
 
     try {
@@ -233,8 +278,155 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
       }
     } catch (e) {}
 
-    return targetUserName
-      ? `🤖 ¡El grupo está demasiado silencioso che! @${targetUserName} ¿en qué andás metido hoy? 👀☕`
-      : `🤖 Este grupo está sospechosamente tranquilo... ¿Todos sobrevivieron al día o están esperando que hable el otro? 😂☕`;
+    // Fallbacks dinámicos seguros
+    if (targetMention) {
+      return `🤖 ¡El grupo está sospechosamente quieto! @${targetMention.phone} tirá un centro che, ¿en qué andás hoy? 👀☕`;
+    }
+    const fallbackNudges = [
+      '🤖 Che, este grupo está más silencioso que biblioteca de noche... ¿Todos sobrevivieron al día o qué onda? 😂☕',
+      '👀 ¿Se les cortó el WiFi a todos o están esperando que hable el otro para saltar? Despierten che 🚀',
+      '🤔 Pregunta seria para romper el hielo en este desierto: ¿el mate va con o sin yuyos? Abran debate 👇🧉',
+      '🐶 Che, asomo la patita porque acá no vuela una mosca... ¿en qué andan metidos hoy? ✨'
+    ];
+    return fallbackNudges[Math.floor(Math.random() * fallbackNudges.length)];
+  }
+
+  /**
+   * Genera un mensaje humorístico de "Búsqueda de Paradero" para miembros inactivos (+7 días)
+   */
+  public async generateGhostMemberCallout(userPhone: string, userName: string, daysInactive: number): Promise<string> {
+    const prompt = `Un miembro del grupo de WhatsApp (${userName}) lleva ${daysInactive} días sin escribir un solo mensaje. Genera un aviso divertido y con mucha buena onda de "Búsqueda de Paradero / Alerta Fantasma" etiquetando a @${userPhone} (debes incluir exactamente "@${userPhone}" en el texto). Pregúntale si está vivo, si lo secuestraron los extraterrestres o si cambió de vida, y pídele que mande una señal de vida aunque sea un sticker. Máximo 2 oraciones, tono compinche argentino con emojis.`;
+
+    try {
+      if (this.externalProvider && this.externalProvider.isConfigured) {
+        return (await this.externalProvider.generateReply(prompt, [])).trim();
+      }
+      if (this.metaProvider && this.metaProvider.isConfigured) {
+        return (await this.metaProvider.generateReply(prompt, [])).trim();
+      }
+    } catch (e) {}
+
+    return `👻 *REPORTE DE PERSONAS PERDIDAS* 🔍\nChe @${userPhone}, ¡hace más de una semana que no te leemos por acá! ¿Todo bien o te tragó la tierra? 🛸 ¡Mandá una señal de vida aunque sea un sticker che! 😂`;
+  }
+
+  /**
+   * Genera una intervención espontánea ingeniosa y compinche sobre la conversación activa
+   */
+  public async generateSpontaneousChimeIn(recentConversation: string): Promise<string> {
+    const prompt = `Estás escuchando la conversación en un grupo de amigos de WhatsApp donde eres la mascota compinche (Mequetrefe / Vector).
+Los humanos están charlando de esto:
+"""
+${recentConversation}
+"""
+Entrométete de forma espontánea, breve y divertida (máximo 1 o 2 oraciones). Puedes acotar un remate gracioso, dar una opinión inesperada o tirar una chicana de buena onda sobre lo que están hablando. Habla como un argentino real en WhatsApp, sin ser pesado.`;
+
+    try {
+      if (this.externalProvider && this.externalProvider.isConfigured) {
+        return formatWhatsAppText(await this.externalProvider.generateReply(prompt, []));
+      }
+      if (!this.isMetaAiBusy && this.metaProvider && this.metaProvider.isConfigured) {
+        this.isMetaAiBusy = true;
+        try {
+          return formatWhatsAppText(await this.metaProvider.generateReply(prompt, []));
+        } finally {
+          this.isMetaAiBusy = false;
+        }
+      }
+    } catch (e) {}
+
+    return `Perdón que me meta che, pero venía leyendo la charla y no podía quedarme callado... ¡qué temita metieron sobre la mesa! 😂🍿`;
+  }
+
+  /**
+   * Colección de al menos 16 aperturas dinámicas con energía positiva
+   */
+  private static readonly MORNING_GREETINGS = [
+    '☀️ *¡Buen día, gente!* Espero que hayan arrancado el día con todo ☕🚀',
+    '☀️ *¡Arriba ese ánimo, equipo!* Que hoy sea una gran jornada para todos ☕✨',
+    '☕ *¡Buen día para todos!* Taza de café en mano y a encarar la jornada con la mejor vibra 🚀',
+    '🌅 *¡Muy buenos días a toda la banda!* Arrancamos un nuevo día con todo el ritmo 🧉⚡',
+    '☀️ *¡Buen día, gente linda!* Espero que hayan descansado de diez y estén listos para romperla hoy 💪🚀',
+    '🧉 *¡Buen día a todos!* Mate listo y a encarar este día con toda la energía ✨',
+    '☀️ *¡Hola a todos!* ¡Muy buen día! Que tengan una jornada productiva y sin dolores de cabeza ☕😎',
+    '🚀 *¡Buen día!* Nuevo día, nuevas metas. ¡A darle para adelante con todo! ☕💪',
+    '✨ *¡Muy buenos días!* Que tengan un día espectacular y lleno de buenas noticias ☕🎉',
+    '☀️ *¡Arriba gente!* Ya amaneció y hay que meterle pilas a esta jornada 🧉🚀',
+    '☕ *¡Buen día, cracks!* Que no falte el café ni las ganas de encarar la rutina hoy 💻🔥',
+    '🌅 *¡Buen día, gente bella!* Arrancamos con toda la actitud positiva para hoy ☕✨',
+    '☀️ *¡Buenas, buenas!* Espero que arranquen este día con una sonrisa y pilas recargadas 🚀🧉',
+    '🔥 *¡Buen día a todo el grupo!* A ponerle garra y buena onda a lo que toque hacer hoy ☕💪',
+    '☀️ *¡Buen día a la mejor comunidad!* Que tengan una jornada liviana, productiva y de diez ☕🙌',
+    '☕ *¡Arriba todo el mundo!* Despertando motores para tener un día increíble 🚀✨'
+  ];
+
+  /**
+   * Genera un saludo matutino dinámico variando entre 16+ opciones o mediante IA si está disponible.
+   * REGLA ESTRICTA: El saludo no debe mencionar días de la semana ni fechas, para no duplicar ni contradecir el renglón de la fecha.
+   */
+  public async generateDynamicMorningGreeting(dayInfo?: string): Promise<string> {
+    const greetings = AIService.MORNING_GREETINGS;
+    const randomFallback = greetings[Math.floor(Math.random() * greetings.length)];
+    const daysRegex = /\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i;
+
+    // Si hay IA disponible, intentamos enriquecer o variar dinámicamente
+    if (this.metaProvider && this.metaProvider.isConfigured) {
+      try {
+        const prompt = `Genera un saludo matutino breve y cálido (máximo 1 línea) para un grupo de WhatsApp de amigos en Argentina. Usa emojis de mañana y café (☀️, ☕, 🚀, 🧉). Tono compinche y con buena onda.
+REGLA ESTRICTA Y OBLIGATORIA:
+PROHIBIDO TERMINANTEMENTE mencionar días de la semana (NO digas lunes, martes, miércoles, etc.) ni fechas numéricas, ya que la fecha exacta se imprime justo debajo. Solo desea un gran día o saluda alegremente. Directo al grano sin comillas.`;
+        const reply = await this.metaProvider.generateReply(prompt, [], { rawPrompt: true });
+        if (reply && reply.length >= 10 && reply.length <= 150 && !daysRegex.test(reply)) {
+          return reply.trim();
+        }
+      } catch {}
+    } else if (this.externalProvider && this.externalProvider.isConfigured) {
+      try {
+        const prompt = `Genera un saludo matutino breve y alegre (1 línea) para WhatsApp. Emojis (☀️, ☕, 🚀). PROHIBIDO mencionar días de la semana ni fechas. Solo la frase de saludo, sin comillas.`;
+        const reply = await this.externalProvider.generateReply(prompt, [], { maxTokens: 80 });
+        if (reply && reply.length >= 10 && reply.length <= 150 && !daysRegex.test(reply)) {
+          return reply.trim();
+        }
+      } catch {}
+    }
+
+    return randomFallback;
+  }
+
+  /**
+   * Genera un resumen corto y atractivo de 1 a 2 oraciones para una noticia tech usando Meta AI Bridge (o fallback)
+   */
+  public async summarizeNewsArticle(title: string, link: string, snippet?: string): Promise<string> {
+    const cleanSnippet = snippet ? snippet.replace(/\s+/g, ' ').trim().slice(0, 500) : '';
+    const detailPart = cleanSnippet ? `\nDetalles del artículo: "${cleanSnippet}"` : '';
+    const prompt = `Resume en 1 o 2 oraciones breves, claras y atractivas en español para WhatsApp la siguiente noticia de tecnología:\nTítulo: ${title}${detailPart}\nEnlace: ${link}\nEntrega ÚNICAMENTE el resumen breve en texto plano, directo al grano, sin saludos ni introducciones ni comillas.`;
+
+    // 1. Prioridad: Meta AI Bridge
+    if (this.metaProvider && this.metaProvider.isConfigured) {
+      try {
+        const reply = await this.metaProvider.generateReply(prompt, [], { rawPrompt: true });
+        if (reply && reply.trim().length > 15) {
+          return reply.trim();
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ [AIService] Falló resumen con Meta AI Bridge: ${err?.message || err}. Intentando fallback.`);
+      }
+    }
+
+    // 2. Fallback: Proveedor externo si está disponible
+    if (this.externalProvider && this.externalProvider.isConfigured) {
+      try {
+        const reply = await this.externalProvider.generateReply(prompt, [], { maxTokens: 120 });
+        if (reply && reply.trim().length > 15) {
+          return reply.trim();
+        }
+      } catch {}
+    }
+
+    // 3. Fallback estático con snippet limpio o título
+    if (cleanSnippet && cleanSnippet.length > 25) {
+      return cleanSnippet.endsWith('.') ? cleanSnippet : `${cleanSnippet}...`;
+    }
+
+    return `Novedad sobre ${title}. Te invitamos a leer los detalles completos en el enlace.`;
   }
 }

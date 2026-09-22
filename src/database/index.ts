@@ -7,3 +7,5 @@ export * from './repositories/birthday.repository.js';
 export * from './repositories/statistics.repository.js';
 export * from './repositories/job-execution.repository.js';
 export * from './repositories/news.repository.js';
+export * from './repositories/horoscope.repository.js';
+export * from './repositories/guardrails.repository.js';

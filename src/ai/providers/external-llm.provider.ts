@@ -47,7 +47,8 @@ export class ExternalLLMProvider implements AIProvider {
       userGender: options?.userGender,
       userName: options?.userName,
       isFlirting: options?.isFlirting,
-      isReplyingToBotJoke: options?.isReplyingToBotJoke
+      isReplyingToBotJoke: options?.isReplyingToBotJoke,
+      personalityDirective: options?.personalityDirective
     });
 
     const messages: Array<{ role: string; content: string }> = [

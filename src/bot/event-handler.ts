@@ -13,6 +13,7 @@ import { CommandService } from '../services/command.service.js';
 import { AIService } from '../services/ai.service.js';
 import { character } from '../config/character.js';
 import type { ChatMessage } from '../ai/types.js';
+import type { GuardrailsService } from '../services/guardrails.service.js';
 
 export interface EventHandlerConfig {
   getSocket: () => WASocket | null;
@@ -21,6 +22,7 @@ export interface EventHandlerConfig {
   statsRepo: StatisticsRepository;
   commandService: CommandService;
   aiService: AIService;
+  guardrailsService?: GuardrailsService;
   birthdayRepo?: BirthdayRepository;
   botCleanJid?: string;
   botLid?: string;
@@ -30,6 +32,7 @@ export interface EventHandlerConfig {
   dryRun?: boolean;
   spontaneousChance?: number;
   spontaneousCooldownMs?: number;
+  spontaneousMessageInterval?: number;
   userOnboardingCooldownMs?: number;
 }
 
@@ -38,6 +41,7 @@ export class EventHandler {
   private userCooldowns = new Map<string, number>();
   private groupCooldowns = new Map<string, number>();
   private spontaneousCooldowns = new Map<string, number>();
+  private groupMessageCounters = new Map<string, number>();
   private userOnboardingCooldowns = new Map<string, number>();
   private botJokeMsgIds = new Set<string>();
 
@@ -48,6 +52,11 @@ export class EventHandler {
     const remoteJid = msg.key.remoteJid || '';
     const fromMe = msg.key.fromMe;
 
+    // 0. Regla: Ignorar estados de WhatsApp (@broadcast)
+    if (!remoteJid || remoteJid === 'status@broadcast' || remoteJid.endsWith('@broadcast')) {
+      return;
+    }
+
     // 1. Regla: Ignorar mensajes propios para evitar bucles infinitos
     if (fromMe) return;
 
@@ -55,13 +64,41 @@ export class EventHandler {
     if (!msgId || this.processedMsgIds.has(msgId)) return;
     this.addProcessedId(msgId);
 
-    // 3. Regla: Restricción opcional por TARGET_GROUP_JID
-    if (this.config.targetGroupJid && remoteJid.endsWith('@g.us') && remoteJid !== this.config.targetGroupJid) {
+    const isGroup = remoteJid.endsWith('@g.us');
+    const text = getMessageText(msg).trim();
+    const senderJid = getSenderJid(msg);
+
+    // Evitar bucle si el sender coincide con el JID del bot
+    if (this.config.botCleanJid && senderJid === this.config.botCleanJid) {
       return;
     }
 
-    const text = getMessageText(msg).trim();
-    const senderJid = getSenderJid(msg);
+    // 3. Regla: Gatekeeper de Grupos y Privados (DMs)
+    if (!isGroup) {
+      // Mensajes privados: Solo administradores autorizados y exclusivamente para comandos
+      const isAdmin = this.config.guardrailsService
+        ? this.config.guardrailsService.isAdmin(senderJid)
+        : false;
+
+      if (!isAdmin) {
+        // Silencio absoluto para usuarios comunes en privado
+        return;
+      }
+
+      if (!this.config.commandService.isCommand(text)) {
+        return;
+      }
+    } else {
+      // Grupos: Si el grupo no está autorizado, ignorar completamente (no registrar, no responder)
+      const isAuthorized = this.config.guardrailsService
+        ? this.config.guardrailsService.isGroupAuthorized(remoteJid)
+        : (!this.config.targetGroupJid || remoteJid === this.config.targetGroupJid);
+
+      if (!isAuthorized) {
+        return;
+      }
+    }
+
     const pushName = msg.pushName || 'Usuario';
     const rawTimestamp = msg.messageTimestamp;
     const timestamp = typeof rawTimestamp === 'number'
@@ -69,8 +106,8 @@ export class EventHandler {
       : Date.now();
     const mentionedJids = getMentionedJids(msg);
 
-    // 4. Ingestión Pasiva: Registrar SIEMPRE el mensaje, menciones y estadísticas
-    if (text) {
+    // 4. Ingestión Pasiva: Registrar mensajes y menciones en grupos autorizados
+    if (text && isGroup) {
       this.config.messageRepo.save({
         id: msgId,
         groupJid: remoteJid,
@@ -104,8 +141,37 @@ export class EventHandler {
     const botPhoneNum = botCleanJid.split('@')[0];
     const botLidNum = botLid ? botLid.split('@')[0] : '';
 
-    // 5. Manejo de Comandos Explícitos (/resumen, /menciones, /marcar, /micumple, /top, /ayuda)
+    // Verificar si el grupo autorizado necesita presentación inicial (Onboarding primer ingreso)
+    if (isGroup && this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(remoteJid)) {
+      this.config.guardrailsService.markIntroSent(remoteJid);
+      const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';
+      if (this.config.dryRun) {
+        console.log(`🧪 [DRY_RUN Intro] en ${remoteJid}: "${introMsg}"`);
+      } else {
+        try {
+          await sock.sendMessage(remoteJid, { text: introMsg });
+        } catch (e: any) {
+          console.warn(`⚠️ [Guardrails] Error enviando intro a ${remoteJid}:`, e?.message || e);
+        }
+      }
+    }
+
+    // 5. Manejo de Comandos Explícitos (/resumen, /menciones, /marcar, /registrarse, /top, /ayuda, /admin, etc.)
     if (this.config.commandService.isCommand(text)) {
+      if (this.config.guardrailsService) {
+        const commandName = text.trim().split(/\s+/)[0];
+        const rateLimitCheck = this.config.guardrailsService.checkCommandRateLimit(
+          senderJid,
+          pushName,
+          remoteJid,
+          commandName
+        );
+        if (!rateLimitCheck.allowed) {
+          console.log(`🛡️ [Guardrails] Comando bloqueado por rate limit: ${senderJid} -> ${commandName} (${rateLimitCheck.reason})`);
+          return;
+        }
+      }
+
       try {
         console.log(`⚡ [Comando] De ${pushName} en ${remoteJid}: "${text}"`);
         const cmdResult = await this.config.commandService.executeCommand(
@@ -126,14 +192,29 @@ export class EventHandler {
             await sock.sendMessage(remoteJid, { text: cmdResult.replyText }, quoteOption);
           }
         }
+
+        // Acciones automáticas de administración (Aprobar o Rechazar grupo)
+        if (cmdResult.action === 'group_approved' && cmdResult.actionGroupJid) {
+          if (this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(cmdResult.actionGroupJid)) {
+            this.config.guardrailsService.markIntroSent(cmdResult.actionGroupJid);
+            const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';
+            await sock.sendMessage(cmdResult.actionGroupJid, { text: introMsg });
+          }
+        } else if (cmdResult.action === 'group_rejected' && cmdResult.actionGroupJid) {
+          try {
+            await sock.groupLeave(cmdResult.actionGroupJid);
+            console.log(`👋 [Guardrails] Bot salió del grupo rechazado: ${cmdResult.actionGroupJid}`);
+          } catch (e: any) {
+            console.warn(`⚠️ [Guardrails] Error al salir del grupo rechazado ${cmdResult.actionGroupJid}:`, e?.message || e);
+          }
+        }
       } catch (err: any) {
         console.error(`❌ Error ejecutando comando en ${remoteJid}:`, err?.message || err);
       }
       return;
     }
 
-    // 6. REGLA 1: En grupos, activación conversacional ante @Bot explícito (por JID, LID o texto), cita directa o intervención espontánea
-    const isGroup = remoteJid.endsWith('@g.us');
+    // 6. Activación conversacional en grupos
     let isQuotingBot = false;
     const quoted = getQuotedContext(msg);
 
@@ -145,6 +226,10 @@ export class EventHandler {
     const nameRegex = new RegExp(`@(${dynamicNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
 
     if (isGroup) {
+      // Incrementar contador de mensajes de charla activa en el grupo
+      const currentCount = (this.groupMessageCounters.get(remoteJid) || 0) + 1;
+      this.groupMessageCounters.set(remoteJid, currentCount);
+
       const isMentioned =
         // Detección nativa de WhatsApp por JID telefónico o LID de la cuenta
         (botPhoneNum && mentionedJids.some((j) => j.includes(botPhoneNum))) ||
@@ -162,36 +247,85 @@ export class EventHandler {
 
       // Si no fue mencionado ni citado en el grupo
       if (!isMentioned && !isQuotingBot) {
-        // Evaluar posible intervención espontánea sobre miembros clave (Nati, Belula, Marian, Cristian)
+        // Opción 0: Evaluar si se mencionó algún apodo o palabra de activación de una chica
+        if (this.config.guardrailsService) {
+          const matchedAlias = this.findMatchingAlias(text);
+          if (matchedAlias && matchedAlias.userJid !== senderJid) {
+            // Verificar cooldown de 3 horas para halagarla espontáneamente
+            if (this.config.guardrailsService.canFlirtSpontaneously(matchedAlias.userJid)) {
+              if (Math.random() < 0.45) {
+                await this.handleAliasChimeIn(msg, remoteJid, text, matchedAlias, sock);
+                return;
+              }
+            }
+          }
+        }
+
+        // Opción A: Evaluar posible intervención espontánea sobre miembros clave
         const targetMember = this.detectTargetMember(text);
         if (targetMember && this.shouldTriggerSpontaneous(remoteJid)) {
           await this.handleSpontaneousIntervention(msg, remoteJid, text, targetMember, sock);
+          return;
         }
+
+        // Opción B: Acotación espontánea por acumulación de mensajes conversacionales
+        const interval = this.config.spontaneousMessageInterval ?? 18;
+        if (currentCount >= interval && this.shouldTriggerSpontaneous(remoteJid)) {
+          this.groupMessageCounters.set(remoteJid, 0);
+          await this.handleConversationalChimeIn(msg, remoteJid, sock);
+          return;
+        }
+
         return;
       }
     }
 
-    // 7. Verificación de Cooldowns para interacción conversacional directa
-    const now = Date.now();
-    const userCooldown = this.config.userCooldownMs ?? 8000;
-    const groupCooldown = this.config.groupCooldownMs ?? 2500;
+    // 7. Batería Social (15 preguntas/interacciones por hora por usuario con degradación progresiva)
+    let socialBatteryDirective: string | undefined;
+    if (this.config.guardrailsService) {
+      const battery = this.config.guardrailsService.checkSocialBattery(senderJid, pushName);
+      if (!battery.allowed) {
+        console.log(`🔋 [Batería Social] Silencio absoluto para ${pushName} (${senderJid}) - Límite de 15 superado.`);
+        return;
+      }
 
-    const lastUserTime = this.userCooldowns.get(senderJid) || 0;
-    if (now - lastUserTime < userCooldown) {
-      console.log(`⏱️ [Cooldown] Ignorado mensaje de ${pushName} en ${remoteJid}`);
-      return;
+      if (battery.level === 'exhausted' && battery.finalMessage) {
+        console.log(`🔋 [Batería Social] Nivel 15 para ${pushName} (${senderJid}). Enviando mensaje de cierre.`);
+        if (this.config.dryRun) {
+          console.log(`🧪 [DRY_RUN Batería Social] ${battery.finalMessage}`);
+        } else {
+          const sent = await sock.sendMessage(remoteJid, { text: battery.finalMessage }, { quoted: msg });
+          const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+          this.addProcessedId(botMsgId);
+          this.config.messageRepo.save({
+            id: botMsgId,
+            groupJid: remoteJid,
+            senderJid: botCleanJid,
+            senderName: character.displayName,
+            content: battery.finalMessage,
+            timestamp: Date.now()
+          });
+        }
+        return;
+      }
+
+      socialBatteryDirective = battery.personalityDirective;
     }
 
-    const lastGroupTime = this.groupCooldowns.get(remoteJid) || 0;
-    if (now - lastGroupTime < groupCooldown) {
-      console.log(`⏱️ [Cooldown] Ignorado mensaje en grupo ${remoteJid}`);
+    // 8. Verificación de Cooldowns para interacción conversacional directa
+    const now = Date.now();
+    // Anti-flood por usuario (1.2s para evitar duplicados rápidos sin bloquear conversación)
+    const userCooldown = this.config.userCooldownMs ?? 1200;
+    const lastUserTime = this.userCooldowns.get(senderJid) || 0;
+    if (now - lastUserTime < userCooldown) {
+      console.log(`⏱️ [Cooldown] Ignorado flood de ${pushName} en ${remoteJid}`);
       return;
     }
 
     this.userCooldowns.set(senderJid, now);
     this.groupCooldowns.set(remoteJid, now);
 
-    // 8. Generar respuesta conversacional vía IA con contexto real y género
+    // 9. Generar respuesta conversacional vía IA con contexto real y género
     try {
       console.log(`🎯 [Interacción] ${pushName} habló con el bot en ${remoteJid}: "${text}"`);
 
@@ -228,8 +362,18 @@ export class EventHandler {
       // Detectar si el usuario está respondiendo a una broma que hizo el bot
       const isReplyingToBotJoke = Boolean(quoted?.stanzaId && this.botJokeMsgIds.has(quoted.stanzaId));
 
-      // Piropos sutiles y aleatorios para mujeres (~35% de probabilidad)
-      const isFlirting = userGender === 'female' && Math.random() < 0.35;
+      // Piropos cordobeses para mujeres: probabilidad base 60% si no fue halagada en las últimas 3 horas
+      let isFlirting = false;
+      if (userGender === 'female') {
+        const canFlirt = this.config.guardrailsService
+          ? this.config.guardrailsService.canFlirtSpontaneously(senderJid)
+          : true;
+
+        if (canFlirt && Math.random() < 0.60) {
+          isFlirting = true;
+          this.config.guardrailsService?.recordSpontaneousFlirt(senderJid);
+        }
+      }
 
       let aiReply = await this.config.aiService.generateGroupReply(
         remoteJid,
@@ -240,7 +384,8 @@ export class EventHandler {
           userGender,
           userName: pushName,
           isFlirting,
-          isReplyingToBotJoke
+          isReplyingToBotJoke,
+          personalityDirective: socialBatteryDirective
         }
       );
 
@@ -259,9 +404,9 @@ export class EventHandler {
           const isFirstTime = msgCount <= 1;
 
           if (isFirstTime) {
-            aiReply += '\n\n🐶 *P.D.:* ¡Che, como es la primera vez que charlamos, me decís cuándo cumplís años y si preferís que te trate de él o ella así te tengo en mi lista? (tirame un `/micumple DD/MM [el/ella]`) 🎂✨';
+            aiReply += '\n\n🐶 *P.D.:* ¡Che, como es la primera vez que charlamos, me decís cuándo cumplís años y si preferís que te trate de él o ella así te tengo en mi lista? (tirame un `/registrarse DD/MM [el/ella]`) 🎂✨';
           } else {
-            aiReply += '\n\n🐶 *P.D.:* ¡Uh, sabés qué? Me actualizaron la base de datos en Excel (cosas de perro tecnológico 🐾💾) y se me traspapelaron tus datos... ¿cuándo cumplís y preferís que te trate de él o ella? Tirame un `/micumple DD/MM [el/ella]` así no te pierdo fiera!';
+            aiReply += '\n\n🐶 *P.D.:* ¡Uh, sabés qué? Me actualizaron la base de datos en Excel (cosas de perro tecnológico 🐾💾) y se me traspapelaron tus datos... ¿cuándo cumplís y preferís que te trate de él o ella? Tirame un `/registrarse DD/MM [el/ella]` así te tengo en la lista genio/genia! 🎂✨';
           }
         }
       }
@@ -273,11 +418,21 @@ export class EventHandler {
       if (this.config.dryRun) {
         console.log(`🧪 [DRY_RUN] Respuesta IA para ${remoteJid}: "${aiReply.slice(0, 80)}..."`);
       } else {
-        await sock.sendMessage(
+        const sent = await sock.sendMessage(
           remoteJid,
           { text: aiReply },
           { quoted: msg }
         );
+        const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+        this.addProcessedId(botMsgId);
+        this.config.messageRepo.save({
+          id: botMsgId,
+          groupJid: remoteJid,
+          senderJid: botCleanJid,
+          senderName: character.displayName,
+          content: aiReply,
+          timestamp: Date.now()
+        });
       }
     } catch (err: any) {
       console.error(`❌ Error generando respuesta IA para ${remoteJid}:`, err?.message || err);
@@ -320,20 +475,56 @@ export class EventHandler {
       const recent = this.config.messageRepo.getRecentMessages(remoteJid, 4);
       const contextText = recent.map((r) => `${r.senderName}: ${r.content}`).join('\n');
 
-      const joke = await this.config.aiService.generateSpontaneousIntervention(targetMember, contextText);
+      const targetJid = this.config.messageRepo.findUserJidByName(remoteJid, targetMember);
+      const targetLower = targetMember.toLowerCase();
+      let isTargetFemale = targetLower === 'nati' || targetLower === 'belula';
+      if (targetJid && this.config.birthdayRepo) {
+        const profile = this.config.birthdayRepo.get(targetJid);
+        if (profile?.gender === 'female') {
+          isTargetFemale = true;
+        }
+      }
+
+      let canFlirtTarget = isTargetFemale;
+      if (isTargetFemale && targetJid && this.config.guardrailsService) {
+        canFlirtTarget = this.config.guardrailsService.canFlirtSpontaneously(targetJid);
+      }
+
+      if (canFlirtTarget && targetJid && this.config.guardrailsService) {
+        this.config.guardrailsService.recordSpontaneousFlirt(targetJid);
+      }
+
+      const joke = await this.config.aiService.generateSpontaneousIntervention(
+        targetMember,
+        contextText,
+        canFlirtTarget
+      );
 
       // Resolver JID del miembro para etiquetarlo en WhatsApp si está registrado
-      const targetJid = this.config.messageRepo.findUserJidByName(remoteJid, targetMember);
-      const mentions = targetJid ? [targetJid] : [];
+      let mentions: string[] = [];
+      let finalJoke = joke;
+
+      if (targetJid) {
+        mentions = [targetJid];
+        const userPhone = targetJid.replace(/@.*$/, '');
+        const targetRegex = new RegExp(`@?${targetMember}`, 'gi');
+        if (targetRegex.test(finalJoke)) {
+          finalJoke = finalJoke.replace(targetRegex, `@${userPhone}`);
+        } else {
+          finalJoke = `@${userPhone} ${finalJoke}`;
+        }
+      }
 
       if (this.config.dryRun) {
-        console.log(`🧪 [DRY_RUN Espontáneo] Broma sobre ${targetMember} en ${remoteJid}: "${joke}"`);
+        console.log(`🧪 [DRY_RUN Espontáneo] Broma sobre ${targetMember} en ${remoteJid}: "${finalJoke}"`);
       } else {
         const sent = await sock.sendMessage(
           remoteJid,
-          { text: joke, mentions },
+          { text: finalJoke, mentions },
           { quoted: msg }
         );
+        const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+        this.addProcessedId(botMsgId);
         if (sent?.key?.id) {
           this.botJokeMsgIds.add(sent.key.id);
           if (this.botJokeMsgIds.size > 200) {
@@ -341,9 +532,124 @@ export class EventHandler {
             if (first) this.botJokeMsgIds.delete(first);
           }
         }
+        const botJid = this.config.botCleanJid || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : 'bot@s.whatsapp.net');
+        this.config.messageRepo.save({
+          id: botMsgId,
+          groupJid: remoteJid,
+          senderJid: botJid,
+          senderName: character.displayName,
+          content: finalJoke,
+          timestamp: Date.now()
+        });
       }
     } catch (err: any) {
       console.error(`❌ Error en intervención espontánea en ${remoteJid}:`, err?.message || err);
+    }
+  }
+
+  private findMatchingAlias(text: string): { userPhone: string; userJid: string; alias: string } | null {
+    if (!this.config.guardrailsService) return null;
+    const allAliases = this.config.guardrailsService.getAllAliases();
+    if (allAliases.length === 0) return null;
+
+    const lower = text.toLowerCase();
+    for (const item of allAliases) {
+      const regex = new RegExp(`\\b${item.alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (regex.test(lower)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  private async handleAliasChimeIn(
+    msg: WAMessage,
+    remoteJid: string,
+    _text: string,
+    aliasData: { userPhone: string; userJid: string; alias: string },
+    sock: WASocket
+  ): Promise<void> {
+    this.config.guardrailsService?.recordSpontaneousFlirt(aliasData.userJid);
+
+    const compliments = [
+      `¡Epa, escuché "${aliasData.alias}"? Acá la invocaron a la reina del grupo @${aliasData.userPhone}, reportate mi amor que te andan buscando 😉👑`,
+      `Ojo che, hablaron de "${aliasData.alias}" y vine al toque. Un poco de respeto para la que manda acá @${aliasData.userPhone} ✨🐶`,
+      `¡Pero mirá quién apareció en la charla! Nombraron a "${aliasData.alias}" y acá estoy firme a la orden @${aliasData.userPhone} 😉💖`,
+      `Pará la moto, si hablan de "${aliasData.alias}" avisen que me peino che. Toda la facha @${aliasData.userPhone} 🐶✨`,
+      `Che @${aliasData.userPhone}, te andan nombrando como "${aliasData.alias}"... y la verdad que te queda pintado, diosa 😉✨`
+    ];
+
+    const chosen = compliments[Math.floor(Math.random() * compliments.length)];
+    const mentions = [aliasData.userJid];
+
+    if (this.config.dryRun) {
+      console.log(`🧪 [DRY_RUN Apodo Entromisión] en ${remoteJid}: "${chosen}"`);
+    } else {
+      const sent = await sock.sendMessage(
+        remoteJid,
+        { text: chosen, mentions },
+        { quoted: msg }
+      );
+      const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+      this.addProcessedId(botMsgId);
+      const botJid = this.config.botCleanJid || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : 'bot@s.whatsapp.net');
+      this.config.messageRepo.save({
+        id: botMsgId,
+        groupJid: remoteJid,
+        senderJid: botJid,
+        senderName: character.displayName,
+        content: chosen,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  private async handleConversationalChimeIn(
+    msg: WAMessage,
+    remoteJid: string,
+    sock: WASocket
+  ): Promise<void> {
+    const now = Date.now();
+    this.spontaneousCooldowns.set(remoteJid, now);
+
+    try {
+      // Tomar los últimos 6 a 8 mensajes de la conversación
+      const recent = this.config.messageRepo.getRecentMessages(remoteJid, 7);
+      if (!recent || recent.length < 3) return;
+
+      const conversationText = recent.map((r) => `${r.senderName}: ${r.content}`).join('\n');
+      const chimeIn = await this.config.aiService.generateSpontaneousChimeIn(conversationText);
+      if (!chimeIn) return;
+
+      if (this.config.dryRun) {
+        console.log(`🧪 [DRY_RUN Acotación] en ${remoteJid}: "${chimeIn}"`);
+      } else {
+        const sent = await sock.sendMessage(
+          remoteJid,
+          { text: chimeIn },
+          { quoted: msg }
+        );
+        const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+        this.addProcessedId(botMsgId);
+        if (sent?.key?.id) {
+          this.botJokeMsgIds.add(sent.key.id);
+          if (this.botJokeMsgIds.size > 200) {
+            const first = this.botJokeMsgIds.values().next().value;
+            if (first) this.botJokeMsgIds.delete(first);
+          }
+        }
+        const botJid = this.config.botCleanJid || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : 'bot@s.whatsapp.net');
+        this.config.messageRepo.save({
+          id: botMsgId,
+          groupJid: remoteJid,
+          senderJid: botJid,
+          senderName: character.displayName,
+          content: chimeIn,
+          timestamp: Date.now()
+        });
+      }
+    } catch (err: any) {
+      console.error(`❌ Error en acotación espontánea en ${remoteJid}:`, err?.message || err);
     }
   }
 

@@ -9,27 +9,25 @@ import { buildSystemPrompt, buildMetaAIPrompt } from '../../src/config/character
 import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 
 test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
-  await t.test('1. Prompt formatting: Male users are treated as bro, maestro, bestia, animal, etc.', () => {
+  await t.test('1. Prompt formatting: Male users are treated as male with friendly tone', () => {
     const sysPrompt = buildSystemPrompt({ userGender: 'male', userName: 'Cristian' });
     assert.match(sysPrompt, /Cristian/);
-    assert.match(sysPrompt, /bro, maestro, bestia, animal, hermano, pana, fiera/);
+    assert.match(sysPrompt, /buena onda de amigos/);
 
     const metaPrompt = buildMetaAIPrompt('hola bot', undefined, { userGender: 'male' });
-    assert.match(metaPrompt, /bro, maestro, bestia, animal, hermano, pana/);
+    assert.match(metaPrompt, /Tratalo de él con buena onda de amigos/);
   });
 
   await t.test('2. Prompt formatting: Female users with isFlirting get subtle and gentle cordobés compliments', () => {
     const sysPromptFlirt = buildSystemPrompt({ userGender: 'female', isFlirting: true });
-    assert.match(sysPromptFlirt, /CUMPLIDO SUTIL Y DULCE/);
-    assert.match(sysPromptFlirt, /qué linda que estás hoy/);
-    assert.match(sysPromptFlirt, /fino y sutil/);
+    assert.match(sysPromptFlirt, /piropo sutil, dulce y pícaro/);
 
     const sysPromptNormal = buildSystemPrompt({ userGender: 'female', isFlirting: false });
-    assert.doesNotMatch(sysPromptNormal, /CUMPLIDO SUTIL Y DULCE/);
-    assert.match(sysPromptNormal, /TRATO AL USUARIO: La persona con la que hablas prefiere ser tratada como mujer/);
+    assert.doesNotMatch(sysPromptNormal, /piropo/);
+    assert.match(sysPromptNormal, /Tratala como mujer \(ella, reina, genia\)/);
 
     const metaPromptFlirt = buildMetaAIPrompt('hola bot', undefined, { userGender: 'female', isFlirting: true });
-    assert.match(metaPromptFlirt, /cumplido muy sutil, dulce y simpático/);
+    assert.match(metaPromptFlirt, /piropo dulce y sutil/);
   });
 
   await t.test('3. Proactive onboarding: First-time user without profile gets cordial invitation', async () => {
@@ -95,7 +93,7 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
     const replyText = sentMessages[0].content.text;
     assert.match(replyText, /¡Hola! Todo bien por acá\./);
     assert.match(replyText, /como es la primera vez que charlamos, me decís cuándo cumplís años/);
-    assert.match(replyText, /\/micumple DD\/MM \[el\/ella\]/);
+    assert.match(replyText, /\/registrarse DD\/MM \[el\/ella\]/);
 
     db.close();
   });
@@ -182,7 +180,7 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
     assert.match(replyText, /¡Hola viejo amigo!/);
     assert.match(replyText, /Me actualizaron la base de datos en Excel/);
     assert.match(replyText, /perro tecnológico/);
-    assert.match(replyText, /\/micumple DD\/MM \[el\/ella\]/);
+    assert.match(replyText, /\/registrarse DD\/MM \[el\/ella\]/);
 
     db.close();
   });

@@ -2,6 +2,8 @@ import { SummaryService } from './summary.service.js';
 import { BirthdayService } from './birthday.service.js';
 import { InactivityService } from './inactivity.service.js';
 import { NewsService } from './news.service.js';
+import { WeatherService } from './weather.service.js';
+import { AIService } from './ai.service.js';
 import { JobExecutionRepository } from '../database/repositories/job-execution.repository.js';
 import { getTodayCordoba } from '../utils/date.js';
 
@@ -20,6 +22,8 @@ export class SchedulerService {
     private birthdayService: BirthdayService,
     private inactivityService: InactivityService,
     private newsService: NewsService,
+    private weatherService: WeatherService,
+    private aiService: AIService,
     private jobExecutionRepo: JobExecutionRepository,
     private adapter: SchedulerTargetAdapter,
     private timezone: string = 'America/Argentina/Cordoba'
@@ -76,18 +80,18 @@ export class SchedulerService {
         }
       }
 
-      // 2. Mensaje Diario Matutino (09:00)
-      if (timeStr === '09:00') {
+      // 2. Mensaje Diario Matutino (08:00)
+      if (timeStr === '08:00') {
         const jobKey = `daily_morning_message:${targetGroupJid}:${today}`;
         if (!this.jobExecutionRepo.isJobExecuted(jobKey)) {
-          console.log(`☀️ [Scheduler] Generando mensaje matutino de las 09:00...`);
-          await this.executeDailyMorningMessage(targetGroupJid, jobKey);
+          console.log(`☀️ [Scheduler] Generando mensaje matutino de las 08:00...`);
+          await this.sendMorningBriefing(targetGroupJid, false, jobKey, now);
         }
       }
 
       // 3. Aviso Preventivo de Cumpleaños de Mañana (12:00)
       if (timeStr === '12:00') {
-        const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid);
+        const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
         if (advanceNotice) {
           console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños de mañana...`);
           await this.adapter.sendMessage(targetGroupJid, advanceNotice);
@@ -98,9 +102,10 @@ export class SchedulerService {
       const minute = now.getMinutes();
       if (minute === 0 || minute === 30) {
         const botJid = this.adapter.getBotCleanJid();
-        const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid);
+        const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid, now);
         if (inactivityResult) {
-          console.log(`🤖 [Scheduler] Reactivando grupo inactivo con mensaje contextual...`);
+          const logType = inactivityResult.type === 'ghost_alert' ? '👻 [Scheduler] Alerta de miembro ausente (+7 días)...' : '🤖 [Scheduler] Reactivando grupo inactivo...';
+          console.log(logType);
           await this.adapter.sendMessage(targetGroupJid, inactivityResult.text, {
             mentions: inactivityResult.mentionedJid ? [inactivityResult.mentionedJid] : []
           });
@@ -114,35 +119,93 @@ export class SchedulerService {
   }
 
   /**
-   * Construye y despacha el mensaje matutino completo de las 09:00
+   * Construye y despacha el saludo matutino completo:
+   * 1. Saludo dinámico, fecha y clima en Argentina, cumpleaños si hay, y cierre con "Les dejo algunas noticias =)".
+   * 2. Despacho secuencial de 3 a 4 noticias en mensajes separados con título, resumen y link.
    */
-  private async executeDailyMorningMessage(groupJid: string, jobKey: string): Promise<void> {
-    const greetingHeader = `☀️ *¡Buen día, gente!* Espero que hayan arrancado el día con todo ☕🚀\n`;
+  public async sendMorningBriefing(
+    targetJid: string,
+    isTest: boolean = false,
+    jobKey?: string,
+    date?: Date
+  ): Promise<void> {
+    const now = date || new Date();
 
-    // A) Cumpleaños de hoy
-    const birthdayCelebration = await this.birthdayService.getTodayCelebrationMessage(groupJid);
+    // Fecha en español argentino
+    const dateFormatter = new Intl.DateTimeFormat('es-AR', {
+      timeZone: this.timezone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    });
+    const rawDateStr = dateFormatter.format(now);
+    const capitalizedDate = rawDateStr.charAt(0).toUpperCase() + rawDateStr.slice(1);
 
-    // B) 3 Noticias Tech curadas
-    const news = await this.newsService.getLatestUnpublishedNews(3);
-    const newsBriefing = this.newsService.formatNewsBriefing(news);
+    // 1. Saludo dinámico (varía entre 16+ opciones o IA)
+    const dynamicGreeting = await this.aiService.generateDynamicMorningGreeting(capitalizedDate);
 
-    const sections: string[] = [greetingHeader];
+    // 2. Reporte del clima en Argentina
+    const weatherText = await this.weatherService.getArgentinaWeatherSummary();
+
+    // 3. Cumpleaños de hoy (si aplica)
+    const birthdayCelebration = await this.birthdayService.getTodayCelebrationMessage(targetJid, now);
+
+    // 4. Construcción del Mensaje 1 (Saludo Matutino)
+    const greetingSections: string[] = [
+      dynamicGreeting,
+      '',
+      `📅 Hoy es ${capitalizedDate}.`,
+      weatherText
+    ];
 
     if (birthdayCelebration) {
-      sections.push(birthdayCelebration);
-      sections.push('');
+      greetingSections.push('');
+      greetingSections.push(birthdayCelebration);
     }
 
-    if (newsBriefing) {
-      sections.push(newsBriefing);
-      sections.push('');
+    greetingSections.push('');
+    greetingSections.push(
+      '💪 ¡Que tengan un excelente día! Recuerden que pueden pedir /resumen o consultar /ayuda en cualquier momento.\n\nLes dejo algunas noticias =)'
+    );
+
+    const mainGreetingMessage = greetingSections.join('\n');
+    await this.adapter.sendMessage(targetJid, mainGreetingMessage);
+
+    // 5. Obtener 3 noticias inéditas (3 aleatorias entre las 4 fuentes disponibles)
+    const newsItems = await this.newsService.getLatestUnpublishedNews(3);
+
+    // Despacho secuencial en mensajes separados con un pequeño intervalo
+    const messageDelayMs = isTest ? 300 : 1200;
+    for (const item of newsItems) {
+      await new Promise((resolve) => setTimeout(resolve, messageDelayMs));
+      const singleNewsMessage = this.newsService.formatSingleNewsItem(item);
+      await this.adapter.sendMessage(targetJid, singleNewsMessage);
     }
 
-    sections.push(`💪 _¡Que tengan un excelente día! Recuerden que pueden pedir /resumen o consultar /ayuda en cualquier momento._`);
+    // Registrar idempotencia si es la ejecución programada de las 09:00
+    if (!isTest && jobKey) {
+      this.jobExecutionRepo.recordJobExecution(jobKey, targetJid);
+    }
+  }
 
-    const fullMessage = sections.join('\n');
-    await this.adapter.sendMessage(groupJid, fullMessage);
+  /**
+   * Despacha un bloque de N noticias tech en mensajes separados (para el comando /noticias [n])
+   */
+  public async sendNewsBriefingOnly(targetJid: string, count: number = 1): Promise<void> {
+    const newsItems = await this.newsService.getLatestUnpublishedNews(count);
 
-    this.jobExecutionRepo.recordJobExecution(jobKey, groupJid);
+    if (newsItems.length === 0) {
+      await this.adapter.sendMessage(targetJid, '📰 No hay noticias nuevas inéditas disponibles en este momento.');
+      return;
+    }
+
+    for (let i = 0; i < newsItems.length; i++) {
+      const item = newsItems[i];
+      if (i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+      const singleNewsMessage = this.newsService.formatSingleNewsItem(item);
+      await this.adapter.sendMessage(targetJid, singleNewsMessage);
+    }
   }
 }

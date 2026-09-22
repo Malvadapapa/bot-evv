@@ -23,14 +23,21 @@ const envSchema = z.object({
   DB_PATH: z.string().default('data/bot.sqlite'),
   TIMEZONE: z.string().default('America/Argentina/Cordoba'),
 
+  // Admin security settings
+  ADMIN_PHONE_SUFFIX: z.string().default('3811,266180782755958'),
+
   // Inactivity & Scheduler settings
-  INACTIVITY_THRESHOLD_HOURS: z.coerce.number().default(6),
-  INACTIVITY_COOLDOWN_HOURS: z.coerce.number().default(12),
+  INACTIVITY_THRESHOLD_HOURS: z.coerce.number().default(3.5),
+  INACTIVITY_COOLDOWN_HOURS: z.coerce.number().default(8),
+  INACTIVE_MEMBER_ALERT_DAYS: z.coerce.number().default(7),
+  MAX_GHOST_ALERTS_PER_DAY: z.coerce.number().default(4),
+  GHOST_ALERT_COOLDOWN_HOURS: z.coerce.number().default(2),
   NEWS_COUNT: z.coerce.number().default(3),
 
   // Spontaneous Interventions settings
-  SPONTANEOUS_CHANCE: z.coerce.number().default(0.25),
-  SPONTANEOUS_COOLDOWN_MINUTES: z.coerce.number().default(30),
+  SPONTANEOUS_CHANCE: z.coerce.number().default(0.35),
+  SPONTANEOUS_COOLDOWN_MINUTES: z.coerce.number().default(25),
+  SPONTANEOUS_MESSAGE_INTERVAL: z.coerce.number().default(18),
 
   // Timing & Cooldowns (in milliseconds)
   COOLDOWN_USER_MS: z.coerce.number().default(8000),

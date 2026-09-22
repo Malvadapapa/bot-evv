@@ -32,12 +32,15 @@ export class MetaAIProvider implements AIProvider {
         .join('\n');
     }
 
-    const embeddedPrompt = buildMetaAIPrompt(prompt, historySummary, {
-      userGender: options?.userGender,
-      userName: options?.userName,
-      isFlirting: options?.isFlirting,
-      isReplyingToBotJoke: options?.isReplyingToBotJoke
-    });
+    const embeddedPrompt = options?.rawPrompt
+      ? prompt
+      : buildMetaAIPrompt(prompt, historySummary, {
+          userGender: options?.userGender,
+          userName: options?.userName,
+          isFlirting: options?.isFlirting,
+          isReplyingToBotJoke: options?.isReplyingToBotJoke,
+          personalityDirective: options?.personalityDirective
+        });
 
     console.log(`➡️ [MetaAIProvider] Consultando bridge Meta AI en ${this.bridgeUrl}...`);
     const startTime = Date.now();
@@ -73,8 +76,36 @@ export class MetaAIProvider implements AIProvider {
       throw new Error('Respuesta inválida o vacía recibida desde Meta AI Bridge');
     }
 
+    if (this.isCannedRefusal(content)) {
+      console.warn(`🛡️ [MetaAIProvider] Detectada respuesta de rechazo/censura de Meta AI: "${content.slice(0, 80)}...". Forzando fallback a proveedor secundario.`);
+      throw new Error(`Meta AI rechazó la solicitud con respuesta enlatada: "${content.slice(0, 100)}"`);
+    }
+
     console.log(`✅ [MetaAIProvider] Respuesta recibida de Meta AI Bridge en ${elapsed}s (${content.length} caracteres)`);
+    if (options?.rawPrompt) {
+      return content.trim();
+    }
     return this.cleanResponse(content);
+  }
+
+  /**
+   * Detecta si la respuesta es un rechazo / censura estándar de Meta AI
+   */
+  public isCannedRefusal(text: string): boolean {
+    const lower = text.toLowerCase().trim();
+    return (
+      lower.includes("sorry, i can't help you with this request") ||
+      lower.includes("sorry, i cannot help with this request") ||
+      lower.includes("i can't help with that request") ||
+      lower.includes("i'm unable to assist with this request") ||
+      lower.includes("i cannot fulfill this request") ||
+      lower.includes("no puedo ayudarte con esta solicitud") ||
+      lower.includes("no puedo cumplir con esta solicitud") ||
+      lower.includes("no puedo generar contenido que") ||
+      lower.includes("as an ai developed by meta") ||
+      lower.includes("como modelo de lenguaje de meta") ||
+      (lower.includes("sorry, i can't") && lower.includes("help you with"))
+    );
   }
 
   /**

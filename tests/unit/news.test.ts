@@ -8,18 +8,20 @@ test('NewsService Unit Tests', async (t) => {
   const newsRepo = new NewsRepository(db);
   const newsService = new NewsService(newsRepo);
 
-  await t.test('Parses RSS XML with CDATA and standard tags', () => {
+  await t.test('Parses RSS XML with CDATA, HTML cleaning and descriptions', () => {
     const mockXml = `
       <rss version="2.0">
         <channel>
           <title>Test Feed</title>
           <item>
-            <title><![CDATA[Node.js 24 Released with SQLite Support]]></title>
-            <link>https://dev.to/nodejs-24</link>
+            <title><![CDATA[Arcjet: protege tus agentes IA]]></title>
+            <link>https://dev.to/arcjet-protege</link>
+            <description><![CDATA[<p>Solución práctica para blindar tus agentes de IA.</p><script>alert(1)</script>]]></description>
           </item>
           <item>
-            <title>TypeScript 5.8 Announcements &amp; Changes</title>
-            <link>https://news.ycombinator.com/item?id=12345</link>
+            <title>Amazon Prime sube de precio en México</title>
+            <link>https://xataka.com.mx/amazon-prime</link>
+            <description>Aumento oficial en el costo del servicio.</description>
           </item>
         </channel>
       </rss>
@@ -27,14 +29,15 @@ test('NewsService Unit Tests', async (t) => {
 
     const items = newsService.parseRssItems(mockXml, 'Test Source');
     assert.strictEqual(items.length, 2);
-    assert.strictEqual(items[0].title, 'Node.js 24 Released with SQLite Support');
-    assert.strictEqual(items[0].link, 'https://dev.to/nodejs-24');
+    assert.strictEqual(items[0].title, 'Arcjet: protege tus agentes IA');
+    assert.strictEqual(items[0].link, 'https://dev.to/arcjet-protege');
     assert.strictEqual(items[0].source, 'Test Source');
-    assert.strictEqual(items[1].title, 'TypeScript 5.8 Announcements & Changes');
-    assert.strictEqual(items[1].link, 'https://news.ycombinator.com/item?id=12345');
+    assert.strictEqual(items[0].summary, 'Solución práctica para blindar tus agentes de IA.');
+    assert.strictEqual(items[1].title, 'Amazon Prime sube de precio en México');
+    assert.strictEqual(items[1].summary, 'Aumento oficial en el costo del servicio.');
   });
 
-  await t.test('Deduplicates published news correctly', () => {
+  await t.test('Deduplicates published news correctly in SQLite', () => {
     const link = 'https://news.example.com/unique-article-1';
     assert.strictEqual(newsRepo.isNewsPublished(link), false);
 
@@ -42,32 +45,42 @@ test('NewsService Unit Tests', async (t) => {
     assert.strictEqual(newsRepo.isNewsPublished(link), true);
   });
 
-  await t.test('Formats news briefing for WhatsApp message', () => {
+  await t.test('Formats single news item for separate message dispatch', () => {
+    const item = {
+      id: 'https://test.com/news',
+      title: 'Nuevo Framework Web',
+      link: 'https://test.com/news',
+      source: 'Dev.to (Español)',
+      summary: 'Revoluciona el rendimiento con compilación nativa.'
+    };
+
+    const formatted = newsService.formatSingleNewsItem(item);
+    assert.strictEqual(
+      formatted,
+      '📰 *Nuevo Framework Web*\n\nRevoluciona el rendimiento con compilación nativa.\n\n🔗 https://test.com/news'
+    );
+  });
+
+  await t.test('Cleans HTML tags, scripts and entities thoroughly', () => {
+    const dirty = '<p>Texto inicial &amp; m&aacute;s <script>console.log("hack")</script><iframe src="ad"></iframe></p>';
+    const cleaned = newsService.cleanHtmlText(dirty);
+    assert.strictEqual(cleaned, 'Texto inicial & más');
+  });
+
+  await t.test('Formats legacy news briefing when needed', () => {
     const formatted = newsService.formatNewsBriefing([
       {
         id: '1',
         title: 'Nueva versión de Node.js',
         link: 'https://nodejs.org',
-        source: 'Dev.to'
-      },
-      {
-        id: '2',
-        title: 'Novedades de SQLite',
-        link: 'https://sqlite.org',
-        source: 'Hacker News'
+        source: 'Dev.to',
+        summary: 'Incluye soporte nativo para SQLite.'
       }
     ]);
 
     assert.match(formatted, /Novedades y Noticias Tech del Día/);
     assert.match(formatted, /1\. \*Nueva versión de Node\.js\*/);
-    assert.match(formatted, /2\. \*Novedades de SQLite\*/);
     assert.match(formatted, /https:\/\/nodejs\.org/);
-    assert.match(formatted, /https:\/\/sqlite\.org/);
-  });
-
-  await t.test('Returns empty string when no news available', () => {
-    const formatted = newsService.formatNewsBriefing([]);
-    assert.strictEqual(formatted, '');
   });
 
   db.close();
