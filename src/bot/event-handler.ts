@@ -149,7 +149,8 @@ export class EventHandler {
     const botLidNum = botLid ? botLid.split('@')[0] : '';
 
     // Verificar si el grupo autorizado necesita presentación inicial (Onboarding primer ingreso)
-    if (isGroup && this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(remoteJid)) {
+    const isApproving = text.startsWith('/aprobar') || text.startsWith('!aprobar');
+    if (isGroup && !isApproving && this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(remoteJid)) {
       this.config.guardrailsService.markIntroSent(remoteJid);
       const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';
       if (this.config.dryRun) {
@@ -202,10 +203,14 @@ export class EventHandler {
 
         // Acciones automáticas de administración (Aprobar o Rechazar grupo)
         if (cmdResult.action === 'group_approved' && cmdResult.actionGroupJid) {
-          if (this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(cmdResult.actionGroupJid)) {
+          if (this.config.guardrailsService) {
+            const alreadySent = this.config.guardrailsService.isIntroSent(cmdResult.actionGroupJid);
             this.config.guardrailsService.markIntroSent(cmdResult.actionGroupJid);
-            const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';
-            await sock.sendMessage(cmdResult.actionGroupJid, { text: introMsg });
+            // Solo enviar saludo si se aprobó por mensaje privado (desde fuera del grupo) y no se había enviado
+            if (!alreadySent && cmdResult.actionGroupJid !== remoteJid) {
+              const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';
+              await sock.sendMessage(cmdResult.actionGroupJid, { text: introMsg });
+            }
           }
         } else if (cmdResult.action === 'group_rejected' && cmdResult.actionGroupJid) {
           try {
