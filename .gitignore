@@ -16,3 +16,5 @@ meta-ai-bridge/wametaai.db*
 meta-ai-bridge/*.exe
 meta-ai-bridge/wametaai
 scratch/
+*.rar
+*.zip

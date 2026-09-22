@@ -339,6 +339,7 @@ export class CommandService {
           '• */h largo [signo]* → Predicción completa y extendida del horóscopo.',
           '• */top* → Ranking de los 10 participantes más activos del grupo.',
           '• */noticias [n]* → Envía 1 o más noticias tech (ej: /noticias o /noticias 2).',
+          '• */version* → Muestra la versión actual y estado del bot.',
           '• *test!noticias* / *test!comentario* → Comandos de prueba (solo admin).',
           '• */ayuda* → Muestra esta guía de comandos.',
           '---------------------------------------',
@@ -637,6 +638,23 @@ export class CommandService {
             replyText: `❌ *Error durante la actualización:*\n\`\`\`${err?.message || err}\`\`\``
           };
         }
+      }
+
+      case 'version':
+      case 'v': {
+        const reply = [
+          '🤖 *MEQUETREFE BOT - ESTADO DEL SISTEMA*',
+          '---------------------------------------',
+          '📦 *Versión:* v1.1.0',
+          '🚀 *Entorno:* Windows Server VPS (PM2 24/7)',
+          '🔄 *Sincronización:* GitHub Actions Auto-Deploy Activo',
+          '🧠 *IA:* Meta AI + Groq Qwen Fallback',
+          '🛡️ *Guardrails:* Rate Limiting, Batería Social & DMs',
+          '✨ *Módulos:* Horóscopo, Noticias, Resúmenes, Apodos & Efemérides',
+          '---------------------------------------',
+          '💡 _Todo marchando de diez fiera!_'
+        ].join('\n');
+        return { handled: true, replyText: reply };
       }
 
       default:
