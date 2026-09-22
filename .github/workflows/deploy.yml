@@ -8,18 +8,34 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Actualizar repositorio
+      - name: Actualizar, compilar y reiniciar bot
+        shell: powershell
         run: |
+          $paths = @("C:\bot-evv", "C:\Users\Administrador\bot-evv", "$env:USERPROFILE\bot-evv")
+          $target = $null
+          foreach ($p in $paths) {
+            if (Test-Path "$p\.git") {
+              $target = $p
+              break
+            }
+          }
+          if (-not $target) {
+            Write-Error "No se encontro la carpeta del bot con repositorio git en las rutas habituales."
+            exit 1
+          }
+
+          Write-Host "Directorio encontrado: $target"
+          Set-Location $target
+
+          Write-Host "Descargando ultimos cambios de main..."
           git pull origin main
 
-      - name: Instalar dependencias
-        run: |
+          Write-Host "Instalando dependencias si hubo cambios..."
           npm install
 
-      - name: Compilar TypeScript
-        run: |
+          Write-Host "Compilando TypeScript..."
           npm run build
 
-      - name: Reiniciar bot en PM2
-        run: |
+          Write-Host "Reiniciando bot en PM2..."
           pm2 restart bot-evv
+          Write-Host "Despliegue automatico completado con exito!"
