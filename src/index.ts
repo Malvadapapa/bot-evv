@@ -133,6 +133,15 @@ const schedulerAdapter: SchedulerTargetAdapter = {
     return jids;
   },
   getTargetGroupJid: () => env.TARGET_GROUP_JID,
+  getGroupParticipants: async (groupJid: string) => {
+    if (!currentSocket || !groupJid.endsWith('@g.us')) return [];
+    try {
+      const meta = await currentSocket.groupMetadata(groupJid);
+      return meta.participants ? meta.participants.map((p) => p.id) : [];
+    } catch {
+      return [];
+    }
+  },
   getBotCleanJid: () => {
     const rawId = currentSocket?.user?.id;
     return rawId ? rawId.split(':')[0] + '@s.whatsapp.net' : '';
@@ -256,9 +265,14 @@ async function startBot(): Promise<void> {
       // Iniciar scheduler de tareas programadas
       scheduler.start();
 
-      // Difusión automática de novedades de versión tras conectarse
+      // Difusión automática de novedades de versión tras conectarse (desactivada por defecto para permitir acumulación)
       setTimeout(async () => {
         try {
+          const autoBroadcast = guardrailsRepo.getConfig('auto_broadcast_on_start', 'false') === 'true';
+          if (!autoBroadcast) {
+            console.log(`ℹ️ [Changelog] Difusión automática al inicio desactivada para permitir acumular mejoras. Usar /novedades broadcast para difundir cuando se decida.`);
+            return;
+          }
           const lastVersion = guardrailsRepo.getConfig('last_broadcast_version', '');
           const lastDate = guardrailsRepo.getConfig('last_broadcast_date', '');
           const today = getTodayCordoba();

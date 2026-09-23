@@ -164,4 +164,53 @@ test('Changelog, Multi-Group Scheduler & Context Isolation Suite', async (t) => 
     assert.equal(res.handled, true);
     assert.match(res.replyText || '', new RegExp(`¡Mequetrefe se actualizó a la versión v${CURRENT_VERSION.version}!`));
   });
+
+  await t.test('6. Command /novedades broadcast sends to all groups when triggered by admin', async () => {
+    const db = Database.createInMemory();
+    const summaryRepo = new SummaryRepository(db);
+    const msgRepo = new MessageRepository(db);
+    const mentionRepo = new MentionRepository(db);
+    const bdayRepo = new BirthdayRepository(db);
+    const statsRepo = new StatisticsRepository(db);
+    const guardrailsRepo = new (await import('../../src/database/repositories/guardrails.repository.js')).GuardrailsRepository(db);
+
+    const guardrailsService = new GuardrailsService(guardrailsRepo, {
+      botInstanceId: 'bot-test',
+      initialAdminSuffixes: ['3811'],
+      targetGroupJid: 'grupo1@g.us'
+    });
+
+    const sentBroadcasts: string[] = [];
+    const scheduler = {
+      broadcastCustomMessage: async (text: string) => {
+        sentBroadcasts.push(text);
+        return ['grupo1@g.us', 'grupo2@g.us'];
+      }
+    } as any;
+
+    const cmdService = new CommandService(
+      new SummaryService(summaryRepo, msgRepo),
+      new MentionService(mentionRepo),
+      new ContextMarkerService(mentionRepo, msgRepo),
+      new BirthdayService(bdayRepo, new JobExecutionRepository(db)),
+      new StatisticsService(statsRepo),
+      scheduler,
+      undefined,
+      undefined,
+      undefined,
+      '3811',
+      guardrailsService
+    );
+
+    // Usuario no admin intenta broadcast -> Rechazado
+    const nonAdminRes = await cmdService.executeCommand('grupo1@g.us', '5493510009999@s.whatsapp.net', 'Pedro', '/novedades broadcast');
+    assert.equal(nonAdminRes.handled, true);
+    assert.match(nonAdminRes.replyText || '', /reservada para el administrador/i);
+
+    // Admin ejecuta broadcast -> Exitoso
+    const adminRes = await cmdService.executeCommand('grupo1@g.us', '5493519993811@s.whatsapp.net', 'Admin Cristian', '/novedades broadcast');
+    assert.equal(adminRes.handled, true);
+    assert.match(adminRes.replyText || '', /enviadas con éxito a 2 grupo\(s\)/i);
+    assert.equal(sentBroadcasts.length, 1);
+  });
 });

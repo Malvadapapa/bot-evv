@@ -12,6 +12,7 @@ export interface SchedulerTargetAdapter {
   sendMessage(groupJid: string, text: string, options?: { mentions?: string[] }): Promise<void>;
   getTargetGroupJid?(): string;
   getTargetGroupJids?(): string[];
+  getGroupParticipants?(groupJid: string): Promise<string[]>;
   getBotCleanJid(): string;
 }
 
@@ -89,9 +90,20 @@ export class SchedulerService {
       for (const reminder of dueReminders) {
         try {
           const delivery = this.reminderService.formatDeliveryMessage(reminder);
-          console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid}...`);
+          let mentions = [...delivery.mentions];
+          if (reminder.targetJid === '@all' && this.adapter.getGroupParticipants) {
+            try {
+              const allParticipants = await this.adapter.getGroupParticipants(reminder.groupJid);
+              if (allParticipants && allParticipants.length > 0) {
+                mentions = Array.from(new Set([...mentions, ...allParticipants]));
+              }
+            } catch (pErr: any) {
+              console.warn(`⚠️ [Scheduler] No se pudieron obtener participantes para aviso @all en ${reminder.groupJid}:`, pErr?.message || pErr);
+            }
+          }
+          console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid} (menciones: ${mentions.length})...`);
           await this.adapter.sendMessage(reminder.groupJid, delivery.text, {
-            mentions: delivery.mentions
+            mentions
           });
           this.reminderService.markAsSent(reminder.id);
         } catch (e: any) {

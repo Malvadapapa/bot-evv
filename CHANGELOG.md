@@ -4,6 +4,17 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.3] - 2026-09-23
+### ✨ Novedades y Mejoras
+- **Avisos para todo el grupo (@all, @todos) con mención real a todos los miembros:** Al programar un recordatorio para todo el grupo, el scheduler obtiene los participantes del grupo y los incluye en las menciones de WhatsApp, notificando efectivamente a todos los integrantes.
+- **Limpieza de verbos de petición y conectores:** Frases como `"quiero que avises que..."`, `"deciles que..."`, `"avises que..."` se limpian de manera inteligente, dejando el mensaje limpio y directo (ej: `"son unos cracks"`).
+- **Difusión de novedades y features bajo demanda:** Se desactiva la difusión automática de novedades en cada reinicio para evitar saturar los grupos mientras se codean fixes; el administrador decide cuándo difundir las novedades acumuladas mediante `/novedades broadcast` o a través del asistente.
+
+### 🔧 Correcciones
+- **Detección robusta de `@all` y `@todos`:** Se solucionó el problema por el cual `@all` y `@todos` no eran detectados debido a limitaciones de límites de palabra con el símbolo `@`.
+
+---
+
 ## [v1.2.2] - 2026-09-23
 ### ✨ Novedades y Mejoras
 - **Chequeo de recordatorios de alta precisión (cada 3 segundos):** Los recordatorios cortos (15 segundos, 30 segundos, 1 minuto) se disparan en el momento exacto sin demoras de hasta 60 segundos.

@@ -227,6 +227,96 @@ test('Reminder and Registration Feature Tests', async (t) => {
     assert.strictEqual(p4.message, 'soy pro');
     assert.match(p4.timeLabel || '', /a las 5:02 hs/);
 
+    // Caso 5: "/recordatorio para @all quiero que avises que son unos cracks en 10 segundos"
+    const p5 = service.parseReminderRequest(
+      'para @all quiero que avises que son unos cracks en 10 segundos',
+      '5493519999@s.whatsapp.net',
+      'Cristian',
+      [],
+      true
+    );
+    assert.strictEqual(p5.isReminder, true);
+    assert.strictEqual(p5.isGroupBroadcast, true);
+    assert.strictEqual(p5.message, 'son unos cracks');
+    assert.strictEqual(p5.timeLabel, 'en 10 segundos');
+
+    // Caso 6: "@todos avisá en 5m que traigan hielo"
+    const p6 = service.parseReminderRequest(
+      '@todos avisá en 5m que traigan hielo',
+      '5493519999@s.whatsapp.net',
+      'Cristian'
+    );
+    assert.strictEqual(p6.isReminder, true);
+    assert.strictEqual(p6.isGroupBroadcast, true);
+    assert.strictEqual(p6.message, 'traigan hielo');
+    assert.strictEqual(p6.timeLabel, 'en 5 minutos');
+
+    // Caso 7: "avisa a todos los miembros del grupo en 1h la reunion"
+    const p7 = service.parseReminderRequest(
+      'avisa a todos los miembros del grupo en 1h la reunion',
+      '5493519999@s.whatsapp.net',
+      'Cristian'
+    );
+    assert.strictEqual(p7.isReminder, true);
+    assert.strictEqual(p7.isGroupBroadcast, true);
+    assert.strictEqual(p7.message, 'la reunion');
+    assert.strictEqual(p7.timeLabel, 'en 1 hora');
+
+    db.close();
+  });
+
+  await t.test('3c. checkDueReminders: Mentions all group participants on @all reminder', async () => {
+    const db = Database.createInMemory();
+    const repo = new ReminderRepository(db);
+    const service = new ReminderService(repo);
+
+    const groupJid = '120363001@g.us';
+    const participants = ['5493510001@s.whatsapp.net', '5493510002@s.whatsapp.net', '5493510003@s.whatsapp.net'];
+    const sentOptions: any[] = [];
+
+    const adapter: import('../../src/services/scheduler.service.js').SchedulerTargetAdapter = {
+      sendMessage: async (jid, text, options) => {
+        sentOptions.push(options);
+      },
+      getTargetGroupJids: () => [groupJid],
+      getGroupParticipants: async (jid) => participants,
+      getBotCleanJid: () => 'bot@s.whatsapp.net'
+    };
+
+    const { SchedulerService } = await import('../../src/services/scheduler.service.js');
+    const scheduler = new SchedulerService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new (await import('../../src/database/repositories/job-execution.repository.js')).JobExecutionRepository(db),
+      adapter,
+      'America/Argentina/Cordoba',
+      service
+    );
+
+    // Create due reminder for @all
+    const created = service.createReminder({
+      groupJid,
+      createdByJid: '5493510001@s.whatsapp.net',
+      createdByName: 'Cristian',
+      message: 'son unos cracks',
+      targetTimestamp: Date.now() - 1000,
+      timeLabel: 'en 10 segundos',
+      isGroupBroadcast: true
+    });
+    assert.strictEqual(created.success, true);
+
+    await scheduler.checkDueReminders();
+
+    assert.strictEqual(sentOptions.length, 1);
+    const mentions = sentOptions[0]?.mentions || [];
+    // Debe incluir a los participantes del grupo
+    assert.ok(mentions.includes('5493510002@s.whatsapp.net'));
+    assert.ok(mentions.includes('5493510003@s.whatsapp.net'));
+
     db.close();
   });
 

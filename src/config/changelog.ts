@@ -11,24 +11,38 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.2',
+  version: '1.2.3',
   date: '23/09/2026',
-  title: 'Precisión en recordatorios, disparadores naturales y plantillas dinámicas',
+  title: 'Avisos a todo el grupo con mención real (@all) y difusión de updates a demanda',
   highlights: [
-    'Entrega de recordatorios de alta precisión (cada 3 segundos) para tiempos cortos como 15 o 30 segundos',
-    'Soporte completo de disparadores naturales ("podés recordarme dentro de 15 segundos")',
-    'Plantillas dinámicas con estilo cordobés natural, variadas y adaptadas al género del usuario'
+    'Avisos y recordatorios para todo el grupo (@all, @todos) con notificación/mención real a todos los miembros',
+    'Limpieza inteligente de frases coloquiales y de pedido ("quiero que avises que...", "deciles que...")',
+    'Difusión de novedades y features bajo demanda (/novedades broadcast o a pedido) para no saturar con fixes'
   ],
   fixes: [
-    'Corregido error donde el bot se etiquetaba a sí mismo al programar o entregar un recordatorio',
-    'Corregido error en /recordar que fallaba por no reconocer los parámetros del comando',
-    'Corregido error que mostraba el JID/LID numérico en lugar del nombre real de la persona',
-    'Los auto-recordatorios personales ya no muestran la línea "Para: @..." en la confirmación'
+    'Corregido error por el cual @all y @todos no eran reconocidos al programar recordatorios grupales',
+    'Desactivada la difusión automática en cada reinicio para permitir acumular mejoras durante el desarrollo'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.2',
+    date: '23/09/2026',
+    title: 'Precisión en recordatorios, disparadores naturales y plantillas dinámicas',
+    highlights: [
+      'Entrega de recordatorios de alta precisión (cada 3 segundos) para tiempos cortos como 15 o 30 segundos',
+      'Soporte completo de disparadores naturales ("podés recordarme dentro de 15 segundos")',
+      'Plantillas dinámicas con estilo cordobés natural, variadas y adaptadas al género del usuario'
+    ],
+    fixes: [
+      'Corregido error donde el bot se etiquetaba a sí mismo al programar o entregar un recordatorio',
+      'Corregido error en /recordar que fallaba por no reconocer los parámetros del comando',
+      'Corregido error que mostraba el JID/LID numérico en lugar del nombre real de la persona',
+      'Los auto-recordatorios personales ya no muestran la línea "Para: @..." en la confirmación'
+    ]
+  },
   {
     version: '1.2.1',
     date: '23/09/2026',

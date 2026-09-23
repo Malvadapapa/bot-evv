@@ -47,11 +47,20 @@ export class ReminderService {
   ): ParseReminderResult {
     let text = rawText.trim();
 
-    // Quitar prefijo de comando si existe (/recordar, !recordar, etc.)
-    text = text.replace(/^[!\/]recordar\b/i, '').trim();
+    // Quitar prefijo de comando si existe (/recordar, /recordatorio, !recordar, etc.)
+    text = text.replace(/^[!\/]recordar(?:io)?\b/i, '').trim();
 
-    // Limpiar mención al bot al inicio si vino en el texto (@Mequetrefe ...)
-    text = text.replace(/^@\S+\s+/i, '').trim();
+    // Limpiar mención al bot al inicio si vino en el texto (@Mequetrefe ...), pero sin quitar @all ni @todos
+    text = text.replace(/^@(?!all\b|todos\b)\S+\s+/i, '').trim();
+
+    // Detectar si el aviso es para todo el grupo (puede venir antes o después del disparador)
+    let isGroupBroadcast = false;
+    const groupPattern = /(?:^|\s)(?:para\s+|al?\s+)?(?:@all|@todos|todos?\s+los?\s+(?:miembros?|integrantes?)(?:\s+del\s+grupo)?|todos?\s+los?\s+del\s+grupo|todo\s+el\s+grupo|el\s+grupo|grupo|todos?|la\s+gente)(?:\s+|$|:)/i;
+    const groupMatch = text.match(groupPattern);
+    if (groupMatch) {
+      isGroupBroadcast = true;
+      text = text.replace(groupMatch[0], ' ').trim();
+    }
 
     // Verificar si contiene disparadores naturales si no vino por comando explícito
     const triggerMatch = text.match(
@@ -67,11 +76,13 @@ export class ReminderService {
       text = text.slice(triggerMatch[0].length).trim();
     }
 
-    // Detectar si el aviso es para todo el grupo
-    let isGroupBroadcast = false;
-    if (/\b(?:a\s+todos|al\s+grupo|para\s+todos|@todos|@all)\b/i.test(text)) {
-      isGroupBroadcast = true;
-      text = text.replace(/\b(?:a\s+todos|al\s+grupo|para\s+todos|@todos|@all)\b/gi, '').trim();
+    // Si aún no se detectó grupo al inicio, verificar si quedó después del disparador
+    if (!isGroupBroadcast) {
+      const postTriggerGroupMatch = text.match(groupPattern);
+      if (postTriggerGroupMatch) {
+        isGroupBroadcast = true;
+        text = text.replace(postTriggerGroupMatch[0], ' ').trim();
+      }
     }
 
     // Filtrar tanto al emisor como al propio bot de las menciones
@@ -101,6 +112,15 @@ export class ReminderService {
 
     let remaining = timeParse.remainingText;
 
+    // Verificar si el grupo estaba después de la expresión de tiempo
+    if (!isGroupBroadcast) {
+      const remainingGroupMatch = remaining.match(groupPattern);
+      if (remainingGroupMatch) {
+        isGroupBroadcast = true;
+        remaining = remaining.replace(remainingGroupMatch[0], ' ').trim();
+      }
+    }
+
     // Si no se definió targetJid pero hay un destinatario nombrado en texto, ej: "a @Nattalia Coder" o "a Cristian"
     const targetMatch = remaining.match(/\b(?:a|para)\s+@?([a-zA-Z0-9_\.\-]+(?:\s+[a-zA-Z0-9_\.\-]+)?)\b/i);
     if (!isGroupBroadcast && targetMatch) {
@@ -119,9 +139,9 @@ export class ReminderService {
       targetName = senderName;
     }
 
-    // Limpiar conectores y verbos redundantes del mensaje restante: "que ...", "de ...", "recordame", "avisame", "?"
+    // Limpiar conectores y verbos redundantes del mensaje restante: "quiero que avises que...", "recordame", etc.
     let cleanMessage = remaining
-      .replace(/^(?:recorda(?:me|le)?|recuerda(?:me)?|avisa(?:me|le)?)\s+/i, '')
+      .replace(/^(?:quiero\s+que\s+)?(?:record(?:ar|[áa]me|[áa]le|[áa]les|es|[áa])?|recuerd(?:e|es|a|ame)?|avis(?:ar|[áa]me|[áa]le|[áa]les|es|[áa])?|dec(?:ir|ile|iles)?|hace(?:me|les)?\s+acordar)\s+/i, '')
       .replace(/^(?:que|de|sobre|para|:)\s+/i, '')
       .replace(/[\[\]\(\)]/g, '')
       .replace(/\?+$/, '')

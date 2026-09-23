@@ -51,8 +51,10 @@ git merge develop
 git push origin main
 ```
 
-### Step 4: Production Deployment & Auto-Notification
+### Step 4: Production Deployment & Update Broadcasting
 - Pushing to `main` automatically runs GitHub Actions on the VPS runner.
 - The workflow pulls changes, builds TypeScript, and executes `pm2 restart bot-evv`.
-- When the bot connects to WhatsApp (`connection === 'open'`), `src/index.ts` compares the previous version stored in `system_config` table (`last_broadcast_version`) with `CURRENT_VERSION.version`.
-- If the version is new, it broadcasts the formatted WhatsApp update template to **all authorized groups** exactly once.
+- **Silent Boot (No Auto-Spam):** By default, bot restarts on `main` do NOT automatically broadcast updates to groups. This allows developers to work iteratively, committing fixes and features without spamming the groups on every reboot.
+- **On-Demand Feature Broadcast:** When the developer/user decides to announce the accumulated changes:
+  - The admin can run `/novedades broadcast` (or `/version broadcast`) in WhatsApp (from group or private DM).
+  - Or the user can instruct the coding assistant: *"ahora envía el resumen de features y que se mande la versión al grupo"*.

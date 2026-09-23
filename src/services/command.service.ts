@@ -12,6 +12,7 @@ import type { GuardrailsService } from './guardrails.service.js';
 import type { ReminderService } from './reminder.service.js';
 import { getRandomFemaleAffirmation } from '../config/character.js';
 import { CURRENT_VERSION, buildUpdateBroadcastMessage } from '../config/changelog.js';
+import { getTodayCordoba } from '../utils/date.js';
 
 export interface CommandExecutionResult {
   handled: boolean;
@@ -666,7 +667,8 @@ export class CommandService {
       case 'novedades':
       case 'changelog':
       case 'cambios': {
-        const isBroadcast = args[0]?.toLowerCase() === 'broadcast';
+        const sub = args[0]?.toLowerCase();
+        const isBroadcast = sub === 'broadcast' || sub === 'enviar' || sub === 'difundir' || sub === 'mandar';
         if (isBroadcast) {
           if (!this.checkAdminPermission(senderJid, senderName)) {
             return {
@@ -675,8 +677,17 @@ export class CommandService {
             };
           }
           if (this.schedulerService) {
-            const msg = buildUpdateBroadcastMessage(CURRENT_VERSION);
+            const lastDate = this.guardrailsService?.getConfig('last_broadcast_date') || '';
+            const lastVersion = this.guardrailsService?.getConfig('last_broadcast_version') || '';
+            const today = getTodayCordoba();
+            const isContinuation = lastDate === today && lastVersion !== '' && lastVersion !== CURRENT_VERSION.version;
+
+            const msg = buildUpdateBroadcastMessage(CURRENT_VERSION, isContinuation);
             const sent = await this.schedulerService.broadcastCustomMessage(msg);
+            if (this.guardrailsService) {
+              this.guardrailsService.setConfig('last_broadcast_version', CURRENT_VERSION.version);
+              this.guardrailsService.setConfig('last_broadcast_date', today);
+            }
             return {
               handled: true,
               replyText: `📢 Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s).`
@@ -815,6 +826,33 @@ export class CommandService {
 
       case 'version':
       case 'v': {
+        const sub = args[0]?.toLowerCase();
+        if (sub === 'broadcast' || sub === 'enviar' || sub === 'difundir' || sub === 'mandar') {
+          if (!this.checkAdminPermission(senderJid, senderName)) {
+            return {
+              handled: true,
+              replyText: '⛔ La difusión masiva de novedades está reservada para el administrador.'
+            };
+          }
+          if (this.schedulerService) {
+            const lastDate = this.guardrailsService?.getConfig('last_broadcast_date') || '';
+            const lastVersion = this.guardrailsService?.getConfig('last_broadcast_version') || '';
+            const today = getTodayCordoba();
+            const isContinuation = lastDate === today && lastVersion !== '' && lastVersion !== CURRENT_VERSION.version;
+
+            const msg = buildUpdateBroadcastMessage(CURRENT_VERSION, isContinuation);
+            const sent = await this.schedulerService.broadcastCustomMessage(msg);
+            if (this.guardrailsService) {
+              this.guardrailsService.setConfig('last_broadcast_version', CURRENT_VERSION.version);
+              this.guardrailsService.setConfig('last_broadcast_date', today);
+            }
+            return {
+              handled: true,
+              replyText: `📢 Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s).`
+            };
+          }
+        }
+
         const lines = [
           `🤖 *MEQUETREFE BOT - VERSIÓN v${CURRENT_VERSION.version}*`,
           `📅 *Fecha:* ${CURRENT_VERSION.date}`,
