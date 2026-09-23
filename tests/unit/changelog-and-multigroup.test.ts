@@ -29,9 +29,9 @@ test('Changelog, Multi-Group Scheduler & Context Isolation Suite', async (t) => 
     const message = buildUpdateBroadcastMessage(CURRENT_VERSION);
     assert.match(message, new RegExp(`¡Mequetrefe se actualizó a la versión v${CURRENT_VERSION.version}!`));
     assert.match(message, /Novedades y Mejoras:/);
-    assert.match(message, /Avisos y recordatorios/i);
+    assert.match(message, new RegExp(CURRENT_VERSION.highlights[0].slice(0, 20), 'i'));
     assert.match(message, /Correcciones y Ajustes:/);
-    assert.match(message, /Regla estricta de identidad/i);
+    assert.match(message, new RegExp(CURRENT_VERSION.fixes[0].slice(0, 20), 'i'));
     assert.match(message, /\/ayuda/);
 
     // Test Same-Day continuation

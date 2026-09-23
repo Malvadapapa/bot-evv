@@ -721,7 +721,8 @@ export class CommandService {
           inputArgs,
           senderJid,
           senderName,
-          mentionedJids
+          mentionedJids,
+          true
         );
 
         if (!parsed.isReminder || parsed.error || !parsed.targetTimestamp || !parsed.timeLabel || !parsed.message) {

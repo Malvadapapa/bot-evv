@@ -18,6 +18,7 @@ export interface SchedulerTargetAdapter {
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  private reminderTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private summaryService: SummaryService,
@@ -53,16 +54,52 @@ export class SchedulerService {
     // Ejecutar verificación inicial inmediata
     this.tick().catch(console.error);
 
-    // Heartbeat cada 60 segundos
+    // Heartbeat cada 60 segundos para jobs generales
     this.timer = setInterval(() => {
       this.tick().catch(console.error);
     }, 60000);
+
+    // Heartbeat rápido cada 3 segundos para recordatorios programados
+    if (this.reminderService) {
+      this.reminderTimer = setInterval(() => {
+        this.checkDueReminders().catch(console.error);
+      }, 3000);
+    }
   }
 
   public stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.reminderTimer) {
+      clearInterval(this.reminderTimer);
+      this.reminderTimer = null;
+    }
+  }
+
+  /**
+   * Revisa y entrega recordatorios que hayan alcanzado su tiempo objetivo (precisión de segundos)
+   */
+  public async checkDueReminders(): Promise<void> {
+    if (!this.reminderService) return;
+    try {
+      const now = Date.now();
+      const dueReminders = this.reminderService.getDueReminders(now);
+      for (const reminder of dueReminders) {
+        try {
+          const delivery = this.reminderService.formatDeliveryMessage(reminder);
+          console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid}...`);
+          await this.adapter.sendMessage(reminder.groupJid, delivery.text, {
+            mentions: delivery.mentions
+          });
+          this.reminderService.markAsSent(reminder.id);
+        } catch (e: any) {
+          console.error(`❌ [Scheduler] Error entregando recordatorio ${reminder.id}:`, e?.message || e);
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ [Scheduler] Error en checkDueReminders:', err?.message || err);
     }
   }
 
@@ -76,22 +113,8 @@ export class SchedulerService {
     try {
       const now = overrideDate || new Date();
 
-      // 0. Avisos y Recordatorios Programados (verificación continua cada tick)
-      if (this.reminderService) {
-        const dueReminders = this.reminderService.getDueReminders(now.getTime());
-        for (const reminder of dueReminders) {
-          try {
-            const delivery = this.reminderService.formatDeliveryMessage(reminder);
-            console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid}...`);
-            await this.adapter.sendMessage(reminder.groupJid, delivery.text, {
-              mentions: delivery.mentions
-            });
-            this.reminderService.markAsSent(reminder.id);
-          } catch (e: any) {
-            console.error(`❌ [Scheduler] Error entregando recordatorio ${reminder.id}:`, e?.message || e);
-          }
-        }
-      }
+      // 0. Avisos y Recordatorios Programados
+      await this.checkDueReminders();
 
       const targetGroups = this.getTargetGroups();
       if (targetGroups.length === 0) return;

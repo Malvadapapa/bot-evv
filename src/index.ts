@@ -101,7 +101,14 @@ const guardrailsService = new GuardrailsService(guardrailsRepo, {
   targetGroupJid: env.TARGET_GROUP_JID
 });
 
-const reminderService = new ReminderService(reminderRepo, env.TIMEZONE, guardrailsService);
+const reminderService = new ReminderService(
+  reminderRepo,
+  env.TIMEZONE,
+  guardrailsService,
+  messageRepo,
+  ['143839226503193', env.ADMIN_PHONE_SUFFIX],
+  birthdayRepo
+);
 
 // 5. Adapter y Servicio de Automatización / Scheduler (00:00, 08:00, 12:00, Inactividad)
 const schedulerAdapter: SchedulerTargetAdapter = {
@@ -235,6 +242,11 @@ async function startBot(): Promise<void> {
       }
     } else if (connection === 'open') {
       const botNumber = sock.user?.id.split(':')[0] || sock.user?.id;
+      const botFullId = sock.user?.id || '';
+      const botCleanJid = botFullId ? botFullId.split(':')[0] + '@s.whatsapp.net' : '';
+      const botLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : '';
+      reminderService.setBotJids([botCleanJid, botLid, '143839226503193', botNumber || '']);
+
       console.log('\n======================================================');
       console.log(`🚀 ¡BOT ASISTENTE ACTIVO Y OPERATIVO!`);
       console.log(`📱 Número: ${botNumber}`);

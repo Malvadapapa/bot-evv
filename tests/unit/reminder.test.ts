@@ -115,7 +115,7 @@ test('Reminder and Registration Feature Tests', async (t) => {
     db.close();
   });
 
-  await t.test('3. Natural Templates: Confirmation, third-party delivery, group delivery', () => {
+  await t.test('3. Natural Templates: Confirmation, third-party delivery, group delivery, self delivery', () => {
     const db = Database.createInMemory();
     const repo = new ReminderRepository(db);
     const service = new ReminderService(repo);
@@ -133,25 +133,99 @@ test('Reminder and Registration Feature Tests', async (t) => {
       createdAt: Date.now()
     };
 
-    // Confirmación
+    // Confirmación para tercero (debe mostrar el nombre de la persona, no JID crudo)
     const confirm = service.formatConfirmationMessage(reminder, 'mañana a las 9:00 hs');
-    assert.match(confirm, /¡De una! Agendado para mañana a las 9:00 hs:/);
-    assert.match(confirm, /Para: @5493510002/);
+    assert.match(confirm, /Agendado para mañana a las 9:00 hs|anotado para mañana a las 9:00 hs|guardo para mañana a las 9:00 hs|agendé para mañana a las 9:00 hs/i);
+    assert.match(confirm, /Para: @Cristian/);
     assert.match(confirm, /lavate la cara/);
-    assert.match(confirm, /A esa hora le pego el grito 😉/);
 
-    // Entrega a tercero
+    // Confirmación personal (auto-recordatorio no debe incluir línea "Para:")
+    const selfReminder = { ...reminder, targetJid: null, targetName: 'Leandro' };
+    const selfConfirm = service.formatConfirmationMessage(selfReminder, 'en 15 segundos');
+    assert.strictEqual(selfConfirm.includes('Para:'), false);
+
+    // Entrega a tercero (menciona al destinatario y remitente)
     const deliveryTarget = service.formatDeliveryMessage(reminder);
-    assert.match(deliveryTarget.text, /Che @5493510002, @Leandro me pidió que te haga acordar:/);
+    assert.match(deliveryTarget.text, /@5493510002/);
+    assert.match(deliveryTarget.text, /@5493510001/);
     assert.match(deliveryTarget.text, /"lavate la cara" 🔔/);
-    assert.match(deliveryTarget.text, /¡Avisado estás fiera! 😉/);
     assert.ok(deliveryTarget.mentions.includes('5493510002@s.whatsapp.net'));
+    assert.ok(deliveryTarget.mentions.includes('5493510001@s.whatsapp.net'));
 
     // Entrega al grupo
     const groupReminder = { ...reminder, targetJid: '@all' };
     const deliveryGroup = service.formatDeliveryMessage(groupReminder);
-    assert.match(deliveryGroup.text, /Gente, @Leandro dejó este aviso para el grupo:/);
-    assert.match(deliveryGroup.text, /¡Están todos avisados!/);
+    assert.match(deliveryGroup.text, /@5493510001/);
+    assert.match(deliveryGroup.text, /"lavate la cara" 📢/);
+
+    // Entrega auto-recordatorio
+    const deliverySelf = service.formatDeliveryMessage(selfReminder);
+    assert.match(deliverySelf.text, /@5493510001/);
+    assert.match(deliverySelf.text, /"lavate la cara" 🔔/);
+    assert.ok(deliverySelf.mentions.includes('5493510001@s.whatsapp.net'));
+
+    db.close();
+  });
+
+  await t.test('3b. Bot mention filtering & Natural Modal Triggers', () => {
+    const db = Database.createInMemory();
+    const repo = new ReminderRepository(db);
+    const botLid = '143839226503193@lid';
+    const service = new ReminderService(repo, 'America/Argentina/Cordoba', undefined, undefined, [botLid]);
+
+    // Caso 1: "@Mequetrefe podes recordarme dentro de 15 segundos que soy pro?"
+    // El bot viene en mentionedJids por la mención inicial -> Debe ser auto-recordatorio
+    const p1 = service.parseReminderRequest(
+      '@Mequetrefe podes recordarme dentro de 15 segundos que soy pro?',
+      '5493519999@s.whatsapp.net',
+      'Cristian',
+      [botLid]
+    );
+    assert.strictEqual(p1.isReminder, true);
+    assert.strictEqual(p1.targetJid, null);
+    assert.strictEqual(p1.targetName, 'Cristian');
+    assert.strictEqual(p1.message, 'soy pro');
+    assert.strictEqual(p1.timeLabel, 'en 15 segundos');
+
+    // Caso 2: "@Mequetrefe recorda a @Nattalia Coder en 1m que se duerma"
+    // mentionedJids contiene al bot Y a Natalia -> El bot debe descartarse y Natalia ser el target
+    const nataliaLid = '144075193655382@lid';
+    const p2 = service.parseReminderRequest(
+      '@Mequetrefe recorda a @Nattalia Coder en 1m que se duerma',
+      '5493519999@s.whatsapp.net',
+      'Cristian',
+      [botLid, nataliaLid]
+    );
+    assert.strictEqual(p2.isReminder, true);
+    assert.strictEqual(p2.targetJid, nataliaLid);
+    assert.strictEqual(p2.targetName, 'Nattalia Coder');
+    assert.strictEqual(p2.message, 'se duerma');
+    assert.strictEqual(p2.timeLabel, 'en 1 minuto');
+
+    // Caso 3: Comando explícito sin prefijo de barra en args
+    // "/recordar en 15 segundos que soy pro" -> args: "en 15 segundos que soy pro", isExplicitCommand: true
+    const p3 = service.parseReminderRequest(
+      'en 15 segundos que soy pro',
+      '5493519999@s.whatsapp.net',
+      'Cristian',
+      [],
+      true
+    );
+    assert.strictEqual(p3.isReminder, true);
+    assert.strictEqual(p3.message, 'soy pro');
+    assert.strictEqual(p3.timeLabel, 'en 15 segundos');
+
+    // Caso 4: "/recordar a las 05:02 recordame que soy pro"
+    const p4 = service.parseReminderRequest(
+      'a las 05:02 recordame que soy pro',
+      '5493519999@s.whatsapp.net',
+      'Cristian',
+      [],
+      true
+    );
+    assert.strictEqual(p4.isReminder, true);
+    assert.strictEqual(p4.message, 'soy pro');
+    assert.match(p4.timeLabel || '', /a las 5:02 hs/);
 
     db.close();
   });

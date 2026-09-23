@@ -131,4 +131,16 @@ export class MessageRepository {
     const row = stmt.get(senderJid) as { count: number } | undefined;
     return row?.count || 0;
   }
+
+  public getUserNameByJid(userJid: string): string | null {
+    const stmt = this.db.sqlite.prepare(`
+      SELECT sender_name
+      FROM messages
+      WHERE sender_jid = ? AND sender_name != ''
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(userJid) as { sender_name: string } | undefined;
+    return row?.sender_name || null;
+  }
 }

@@ -11,23 +11,39 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.1',
+  version: '1.2.2',
   date: '23/09/2026',
-  title: 'Avisos y recordatorios programados, identidad estricta y mejoras en registro',
+  title: 'Precisión en recordatorios, disparadores naturales y plantillas dinámicas',
   highlights: [
-    'Sistema de avisos y recordatorios por chat (/recordar o en lenguaje natural)',
-    'Soporte para recordar a un tercero (@usuario), a todo el grupo (@todos) o auto-recordatorio',
-    'Límite de 2 recordatorios por usuario y administración por privado'
+    'Entrega de recordatorios de alta precisión (cada 3 segundos) para tiempos cortos como 15 o 30 segundos',
+    'Soporte completo de disparadores naturales ("podés recordarme dentro de 15 segundos")',
+    'Plantillas dinámicas con estilo cordobés natural, variadas y adaptadas al género del usuario'
   ],
   fixes: [
-    'Regla estricta de identidad: el bot respeta siempre el nombre real de WhatsApp y no inventa nombres ajenos',
-    'El comando /registrarse ahora acepta fecha y pronombre juntos en una sola línea y tolera corchetes [ ]',
-    'Bienvenida a nuevos usuarios corregida sin mensajes confusos'
+    'Corregido error donde el bot se etiquetaba a sí mismo al programar o entregar un recordatorio',
+    'Corregido error en /recordar que fallaba por no reconocer los parámetros del comando',
+    'Corregido error que mostraba el JID/LID numérico en lugar del nombre real de la persona',
+    'Los auto-recordatorios personales ya no muestran la línea "Para: @..." en la confirmación'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.1',
+    date: '23/09/2026',
+    title: 'Avisos y recordatorios programados, identidad estricta y mejoras en registro',
+    highlights: [
+      'Sistema de avisos y recordatorios por chat (/recordar o en lenguaje natural)',
+      'Soporte para recordar a un tercero (@usuario), a todo el grupo (@todos) o auto-recordatorio',
+      'Límite de 2 recordatorios por usuario y administración por privado'
+    ],
+    fixes: [
+      'Regla estricta de identidad: el bot respeta siempre el nombre real de WhatsApp y no inventa nombres ajenos',
+      'El comando /registrarse ahora acepta fecha y pronombre juntos en una sola línea y tolera corchetes [ ]',
+      'Bienvenida a nuevos usuarios corregida sin mensajes confusos'
+    ]
+  },
   {
     version: '1.2.0',
     date: '23/09/2026',

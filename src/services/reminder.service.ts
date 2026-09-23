@@ -1,5 +1,7 @@
 import type { ReminderRepository, ScheduledReminder } from '../database/repositories/reminder.repository.js';
 import type { GuardrailsService } from './guardrails.service.js';
+import type { MessageRepository } from '../database/repositories/message.repository.js';
+import type { BirthdayRepository } from '../database/repositories/birthday.repository.js';
 
 export interface ParseReminderResult {
   isReminder: boolean;
@@ -16,8 +18,22 @@ export class ReminderService {
   constructor(
     private reminderRepo: ReminderRepository,
     private timezone: string = 'America/Argentina/Cordoba',
-    private guardrailsService?: GuardrailsService
+    private guardrailsService?: GuardrailsService,
+    private messageRepo?: MessageRepository,
+    private botJids: string[] = [],
+    private birthdayRepo?: BirthdayRepository
   ) {}
+
+  public setBotJids(jids: string[]): void {
+    this.botJids = jids;
+  }
+
+  public isBotJid(jid: string): boolean {
+    if (!jid) return false;
+    const clean = jid.toLowerCase();
+    if (clean.includes('143839226503193')) return true; // WhatsApp LID de Mequetrefe
+    return this.botJids.some((b) => b && clean.includes(b.toLowerCase()));
+  }
 
   /**
    * Intenta parsear un texto (lenguaje natural o comando) para extraer un recordatorio.
@@ -26,19 +42,23 @@ export class ReminderService {
     rawText: string,
     senderJid: string,
     senderName: string,
-    mentionedJids: string[] = []
+    mentionedJids: string[] = [],
+    isExplicitCommand: boolean = false
   ): ParseReminderResult {
     let text = rawText.trim();
 
     // Quitar prefijo de comando si existe (/recordar, !recordar, etc.)
     text = text.replace(/^[!\/]recordar\b/i, '').trim();
 
-    // Verificar si contiene disparadores naturales si no vino por comando
+    // Limpiar mención al bot al inicio si vino en el texto (@Mequetrefe ...)
+    text = text.replace(/^@\S+\s+/i, '').trim();
+
+    // Verificar si contiene disparadores naturales si no vino por comando explícito
     const triggerMatch = text.match(
-      /^(?:che\s+)?(?:mequetrefe\s+)?(?:por\s+fa(?:vor)?\s+)?(?:avis[aá](?:le)?|record[aá](?:le)?|recordame|haceme\s+acordar|hac[eé]\s+un\s+aviso|tirale\s+un\s+aviso)(?:\s+|$|:)/i
+      /^(?:che\s+)?(?:mequetrefe\s+)?(?:bot\s+)?(?:por\s+fa(?:vor)?\s+)?(?:(?:me\s+)?(?:pod[eé]s|podr[ií]as|quer[eé]s|te\s+pido\s+que(?:\s+me)?)\s+)?(?:recordar(?:me|le|nos)?|record[aá](?:me|le|nos)?|recuerd[aá](?:me)?|avisar(?:me|le|nos)?|avis[aá](?:me|le|nos)?|hac[eé](?:me|nos)?\s+acordar|tir[aá](?:le|me)?\s+un\s+aviso)(?:\s+|$|:)/i
     );
 
-    const isCommand = rawText.trim().startsWith('/') || rawText.trim().startsWith('!');
+    const isCommand = isExplicitCommand || rawText.trim().startsWith('/') || rawText.trim().startsWith('!');
     if (!triggerMatch && !isCommand) {
       return { isReminder: false };
     }
@@ -51,46 +71,60 @@ export class ReminderService {
     let isGroupBroadcast = false;
     if (/\b(?:a\s+todos|al\s+grupo|para\s+todos|@todos|@all)\b/i.test(text)) {
       isGroupBroadcast = true;
-      text = text.replace(/\b(?:a\s+todos|al\s+grupo|para\s+todos|@todos|@all)\b/i, '').trim();
+      text = text.replace(/\b(?:a\s+todos|al\s+grupo|para\s+todos|@todos|@all)\b/gi, '').trim();
     }
 
-    // Detectar si se menciona a un tercero (@usuario)
+    // Filtrar tanto al emisor como al propio bot de las menciones
     let targetJid: string | null = null;
     let targetName: string | null = null;
 
-    if (!isGroupBroadcast && mentionedJids.length > 0) {
-      // Filtrar el emisor
-      const otherMentions = mentionedJids.filter((j) => !j.includes(senderJid));
-      if (otherMentions.length > 0) {
-        targetJid = otherMentions[0];
+    const candidateMentions = mentionedJids.filter(
+      (j) => !j.includes(senderJid) && !this.isBotJid(j)
+    );
+
+    if (!isGroupBroadcast && candidateMentions.length > 0) {
+      targetJid = candidateMentions[0];
+      if (this.messageRepo) {
+        const resolved = this.messageRepo.getUserNameByJid(targetJid);
+        if (resolved) targetName = resolved;
       }
     }
 
-    // Si hay un target en texto estilo "a @cristian" o "a cristian"
-    const targetMatch = text.match(/\b(?:a|para)\s+@?([a-zA-Z0-9_\.\-]+)\b/i);
-    if (!isGroupBroadcast && targetMatch) {
-      const candidateName = targetMatch[1].toLowerCase();
-      if (!['las', 'los', 'la', 'el', 'eso', 'esto', 'que', 'hoy', 'mañana'].includes(candidateName)) {
-        if (!targetJid) {
-          targetName = targetMatch[1];
-        }
-        text = text.replace(targetMatch[0], '').trim();
-      }
-    }
-
-    // Extraer tiempo
+    // Extraer tiempo PRIMERO para evitar colisiones con nombres o destinos
     const timeParse = this.parseTimeString(text);
     if (!timeParse) {
       return {
         isReminder: true,
-        error: 'No pude entender la hora o el momento del aviso. Probá con: "a las 18:00", "en 30m" o "mañana a las 9am".'
+        error: 'No pude entender la hora o el momento del aviso. Probá con: "en 15 segundos", "a las 18:00", "en 30m" o "mañana a las 9am".'
       };
     }
 
-    // Limpiar conectores del mensaje restante: "que ...", "de ...", ":"
-    let cleanMessage = timeParse.remainingText
+    let remaining = timeParse.remainingText;
+
+    // Si no se definió targetJid pero hay un destinatario nombrado en texto, ej: "a @Nattalia Coder" o "a Cristian"
+    const targetMatch = remaining.match(/\b(?:a|para)\s+@?([a-zA-Z0-9_\.\-]+(?:\s+[a-zA-Z0-9_\.\-]+)?)\b/i);
+    if (!isGroupBroadcast && targetMatch) {
+      const candidateName = targetMatch[1].trim();
+      const lowerCandidate = candidateName.toLowerCase();
+      if (!['eso', 'esto', 'que', 'hoy', 'mañana', 'todos'].includes(lowerCandidate)) {
+        if (!targetName) {
+          targetName = candidateName;
+        }
+        remaining = remaining.replace(targetMatch[0], '').trim();
+      }
+    }
+
+    // Si no tiene target ni menciones de terceros, es un auto-recordatorio personal
+    if (!isGroupBroadcast && !targetJid && !targetName) {
+      targetName = senderName;
+    }
+
+    // Limpiar conectores y verbos redundantes del mensaje restante: "que ...", "de ...", "recordame", "avisame", "?"
+    let cleanMessage = remaining
+      .replace(/^(?:recorda(?:me|le)?|recuerda(?:me)?|avisa(?:me|le)?)\s+/i, '')
       .replace(/^(?:que|de|sobre|para|:)\s+/i, '')
       .replace(/[\[\]\(\)]/g, '')
+      .replace(/\?+$/, '')
       .trim();
 
     if (!cleanMessage || cleanMessage.length < 2) {
@@ -117,15 +151,20 @@ export class ReminderService {
   public parseTimeString(input: string): { timestamp: number; label: string; remainingText: string } | null {
     const now = new Date();
 
-    // 1. Relativo: "en X minutos" / "en X horas" / "en 30m" / "en 2h"
-    const relativeMatch = input.match(/\ben\s+(\d+)\s*(minutos?|mins?|m|horas?|hs?|h)\b/i);
+    // 1. Relativo: "en / dentro de X segundos / minutos / horas"
+    const relativeMatch = input.match(
+      /\b(?:en|dentro\s+de)\s+(\d+)\s*(segundos?|segs?|s|minutos?|mins?|m|horas?|hs?|h)\b/i
+    );
     if (relativeMatch) {
       const amount = parseInt(relativeMatch[1], 10);
       const unit = relativeMatch[2].toLowerCase();
       let ms = 0;
       let unitLabel = '';
 
-      if (unit.startsWith('m')) {
+      if (unit.startsWith('s')) {
+        ms = amount * 1000;
+        unitLabel = amount === 1 ? '1 segundo' : `${amount} segundos`;
+      } else if (unit.startsWith('m')) {
         ms = amount * 60 * 1000;
         unitLabel = amount === 1 ? '1 minuto' : `${amount} minutos`;
       } else if (unit.startsWith('h')) {
@@ -159,7 +198,6 @@ export class ReminderService {
       if (meridiem === 'am' && hours === 12) hours = 0;
 
       if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
-        // Formatear en zona horaria de Córdoba
         const target = new Date(now.getTime());
         if (isTomorrow) {
           target.setDate(target.getDate() + 1);
@@ -178,9 +216,9 @@ export class ReminderService {
 
         const remaining = input
           .replace(absMatch[0], '')
-          .replace(/\bmañana\b/i, '')
-          .replace(/\bhoy\b/i, '')
-          .replace(/\ba\s+las?\b/i, '')
+          .replace(/\bmañana\b/gi, '')
+          .replace(/\bhoy\b/gi, '')
+          .replace(/\ba\s+las?\b/gi, '')
           .trim();
 
         return {
@@ -247,23 +285,48 @@ export class ReminderService {
     reminder: ScheduledReminder,
     timeLabel: string
   ): string {
+    const isSelf = !reminder.targetJid || reminder.targetJid === reminder.createdByJid;
     let targetStr = '';
+
     if (reminder.targetJid === '@all') {
       targetStr = 'Para: el grupo completo\n';
-    } else if (reminder.targetJid) {
-      const cleanPhone = reminder.targetJid.split('@')[0];
-      targetStr = `Para: @${cleanPhone}\n`;
-    } else if (reminder.targetName) {
-      targetStr = `Para: @${reminder.targetName}\n`;
+    } else if (!isSelf) {
+      let displayName = reminder.targetName;
+      if (!displayName && reminder.targetJid) {
+        displayName = this.messageRepo?.getUserNameByJid(reminder.targetJid) || null;
+      }
+      if (!displayName && reminder.targetJid) {
+        displayName = reminder.targetJid.split('@')[0];
+      }
+      if (displayName) {
+        const clean = displayName.replace(/^@/, '');
+        targetStr = `Para: @${clean}\n`;
+      }
     }
 
-    return [
+    const openers = [
       `¡De una! Agendado para ${timeLabel}:`,
+      `¡Listo! Quedó anotado para ${timeLabel}:`,
+      `¡Anotado! Lo guardo para ${timeLabel}:`,
+      `¡Dale! Te lo agendé para ${timeLabel}:`
+    ];
+    const opener = openers[Math.floor(Math.random() * openers.length)];
+
+    const closers = [
+      'A esa hora te pego el grito 😉',
+      'Tranqui que no se me pasa.',
+      'A esa hora aviso.',
+      'Dejámelo a mí, a esa hora aviso 😉'
+    ];
+    const closer = closers[Math.floor(Math.random() * closers.length)];
+
+    return [
+      opener,
       `${targetStr}Mensaje: "${reminder.message}"`,
       `(ID: ${reminder.id})`,
       '',
-      `A esa hora le pego el grito 😉`
-    ].filter(Boolean).join('\n');
+      closer
+    ].filter((line) => line !== '').join('\n');
   }
 
   /**
@@ -271,40 +334,112 @@ export class ReminderService {
    */
   public formatDeliveryMessage(reminder: ScheduledReminder): { text: string; mentions: string[] } {
     const mentions: string[] = [];
-    if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
-      mentions.push(reminder.createdByJid);
-    }
+    const senderPhone = reminder.createdByJid.split('@')[0];
 
     // Caso 1: Para el grupo completo
     if (reminder.targetJid === '@all') {
+      if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+        mentions.push(reminder.createdByJid);
+      }
+      const openers = [
+        `Gente, @${senderPhone} dejó este aviso para el grupo:`,
+        `Atención grupo, acá va un recado que dejó @${senderPhone}:`,
+        `Gente, les paso el recordatorio de @${senderPhone}:`
+      ];
+      const closers = [
+        '¡Están todos avisados!',
+        '¡Quedan todos avisados!',
+        '¡Avisados todos!'
+      ];
+      const opener = openers[Math.floor(Math.random() * openers.length)];
+      const closer = closers[Math.floor(Math.random() * closers.length)];
+
       const text = [
-        `Gente, @${reminder.createdByName} dejó este aviso para el grupo:`,
+        opener,
         `"${reminder.message}" 📢`,
         '',
-        `¡Están todos avisados!`
+        closer
       ].join('\n');
       return { text, mentions };
     }
 
     // Caso 2: Para una tercera persona
-    if (reminder.targetJid && reminder.targetJid !== reminder.createdByJid) {
-      mentions.push(reminder.targetJid);
-      const cleanTarget = reminder.targetJid.split('@')[0];
+    const isSelf = !reminder.targetJid || reminder.targetJid === reminder.createdByJid;
+    if (!isSelf) {
+      let targetTag = '';
+      if (reminder.targetJid) {
+        mentions.push(reminder.targetJid);
+        const cleanTarget = reminder.targetJid.split('@')[0];
+        targetTag = `@${cleanTarget}`;
+      } else if (reminder.targetName) {
+        targetTag = reminder.targetName.startsWith('@') ? reminder.targetName : `@${reminder.targetName}`;
+      }
+
+      if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+        mentions.push(reminder.createdByJid);
+      }
+
+      const targetGender = reminder.targetJid ? this.birthdayRepo?.get(reminder.targetJid)?.gender : null;
+
+      const openers = [
+        `Che ${targetTag}, @${senderPhone} me pidió que te haga acordar:`,
+        `Buenas ${targetTag}, @${senderPhone} me dejó este recado para vos:`,
+        `${targetTag}, te paso el aviso que me dejó @${senderPhone}:`
+      ];
+      const opener = openers[Math.floor(Math.random() * openers.length)];
+
+      let closer = '¡Listo el recado!';
+      if (targetGender === 'female') {
+        const femaleClosers = ['¡Avisada estás! 😉', '¡Listo el recado reina!', '¡Ahí lo tenés!'];
+        closer = femaleClosers[Math.floor(Math.random() * femaleClosers.length)];
+      } else if (targetGender === 'male') {
+        const maleClosers = ['¡Avisado estás fiera! 😉', '¡Cumplido el encargo campeón!', '¡Listo el recado!'];
+        closer = maleClosers[Math.floor(Math.random() * maleClosers.length)];
+      } else {
+        const neutralClosers = ['¡Avisado estás! 😉', '¡Cumplido el encargo!', '¡Listo el recado!'];
+        closer = neutralClosers[Math.floor(Math.random() * neutralClosers.length)];
+      }
+
       const text = [
-        `Che @${cleanTarget}, @${reminder.createdByName} me pidió que te haga acordar:`,
+        opener,
         `"${reminder.message}" 🔔`,
         '',
-        `¡Avisado estás fiera! 😉`
+        closer
       ].join('\n');
       return { text, mentions };
     }
 
     // Caso 3: Auto-recordatorio personal
+    if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+      mentions.push(reminder.createdByJid);
+    }
+
+    const senderGender = this.birthdayRepo?.get(reminder.createdByJid)?.gender;
+
+    const openers = [
+      `Che @${senderPhone}, acá tenés lo que me pediste que te recuerde:`,
+      `Buenas @${senderPhone}, te hago acordar lo que me pediste:`,
+      `@${senderPhone}, acá va tu recordatorio:`
+    ];
+    const opener = openers[Math.floor(Math.random() * openers.length)];
+
+    let closer = '¡Cumplido el encargo!';
+    if (senderGender === 'female') {
+      const femaleClosers = ['¡Cumplido el encargo reina!', '¡Ahí lo tenés! 😉', '¡Avisada estás!'];
+      closer = femaleClosers[Math.floor(Math.random() * femaleClosers.length)];
+    } else if (senderGender === 'male') {
+      const maleClosers = ['¡Cumplido el encargo compinche!', '¡Ahí lo tenés fiera!', '¡Avisado estás campeón!'];
+      closer = maleClosers[Math.floor(Math.random() * maleClosers.length)];
+    } else {
+      const neutralClosers = ['¡Cumplido el encargo!', '¡Ahí lo tenés!', '¡Avisado estás! 😉'];
+      closer = neutralClosers[Math.floor(Math.random() * neutralClosers.length)];
+    }
+
     const text = [
-      `Che @${reminder.createdByName}, acá tenés lo que me pediste que te recuerde:`,
+      opener,
       `"${reminder.message}" 🔔`,
       '',
-      `¡Cumplido el encargo compinche!`
+      closer
     ].join('\n');
     return { text, mentions };
   }

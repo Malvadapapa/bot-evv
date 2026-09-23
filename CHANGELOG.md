@@ -4,6 +4,20 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.2] - 2026-09-23
+### ✨ Novedades y Mejoras
+- **Chequeo de recordatorios de alta precisión (cada 3 segundos):** Los recordatorios cortos (15 segundos, 30 segundos, 1 minuto) se disparan en el momento exacto sin demoras de hasta 60 segundos.
+- **Disparadores naturales ampliados:** Soporte para frases con verbos modales (`@Mequetrefe podés recordarme dentro de 15 segundos que soy pro?`, `me podés avisar`, `te pido que me recuerdes`, etc.).
+- **Plantillas dinámicas cordobesas:** Mensajes de confirmación y entrega naturales, no repetitivos, con rotación de frases y adaptación al género del usuario (`fiera`, `campeón`, `reina`, `capa`).
+
+### 🔧 Correcciones
+- **Filtro de menciones al propio bot:** Se eliminó el error por el cual el bot seleccionaba su propio LID (`@143839226503193`) al extraer destinatarios de recordatorios, evitando que se auto-etiquetara o se recordara a sí mismo.
+- **Corrección en comando `/recordar`:** Se corrigió el flag de comando explícito para que `/recordar en 15 segundos que soy pro` y `/recordar a las 05:02 recordame que soy pro` se interpreten correctamente sin error de parámetros.
+- **Resolución de nombres en lugar de JIDs:** Los avisos muestran el nombre real de las personas (ej. `@Nattalia Coder`) en vez de cadenas numéricas o LIDs de WhatsApp.
+- **Confirmación limpia para auto-recordatorios:** Las confirmaciones personales ya no muestran la línea redundante `Para: @...`.
+
+---
+
 ## [v1.2.1] - 2026-09-23
 ### ✨ Novedades y Mejoras
 - **Sistema de avisos y recordatorios programados:** Soporte para programar recordatorios por chat en lenguaje natural o vía `/recordar <tiempo> <mensaje>`.
