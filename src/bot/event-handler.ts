@@ -407,10 +407,15 @@ export class EventHandler {
       const isProfileIncomplete = !hasBirthday || !hasGender;
 
       if (isProfileIncomplete && this.config.birthdayRepo) {
-        const lastOnboardingPrompt = this.userOnboardingCooldowns.get(senderJid) || 0;
-        const onboardingCooldown = this.config.userOnboardingCooldownMs ?? 12 * 60 * 60 * 1000;
+        const memLast = this.userOnboardingCooldowns.get(senderJid) || 0;
+        const dbLastStr = this.config.guardrailsService?.getConfig(`onboard_prompt:${senderJid}`, '0') || '0';
+        const dbLast = parseInt(dbLastStr, 10) || 0;
+        const lastOnboardingPrompt = Math.max(memLast, dbLast);
+        const onboardingCooldown = this.config.userOnboardingCooldownMs ?? 24 * 60 * 60 * 1000;
+
         if (now - lastOnboardingPrompt >= onboardingCooldown) {
           this.userOnboardingCooldowns.set(senderJid, now);
+          this.config.guardrailsService?.setConfig(`onboard_prompt:${senderJid}`, String(now));
           const msgCount = this.config.messageRepo.getMessageCountBySender(senderJid);
           // msgCount <= 1 significa que es su primera interacción registrada
           const isFirstTime = msgCount <= 1;

@@ -10,6 +10,7 @@ import type { HoroscopeService, ZodiacSignInfo } from './horoscope.service.js';
 import type { AIService } from './ai.service.js';
 import type { GuardrailsService } from './guardrails.service.js';
 import { getRandomFemaleAffirmation } from '../config/character.js';
+import { CURRENT_VERSION, buildUpdateBroadcastMessage } from '../config/changelog.js';
 
 export interface CommandExecutionResult {
   handled: boolean;
@@ -339,6 +340,7 @@ export class CommandService {
           '• */h largo [signo]* → Predicción completa y extendida del horóscopo.',
           '• */top* → Ranking de los 10 participantes más activos del grupo.',
           '• */noticias [n]* → Envía 1 o más noticias tech (ej: /noticias o /noticias 2).',
+          '• */novedades* → Muestra las novedades, mejoras y arreglos de la última versión.',
           '• */version* → Muestra la versión actual y estado del bot.',
           '• *test!noticias* / *test!comentario* → Comandos de prueba (solo admin).',
           '• */ayuda* → Muestra esta guía de comandos.',
@@ -670,19 +672,46 @@ export class CommandService {
         }
       }
 
+      case 'novedades':
+      case 'changelog':
+      case 'cambios': {
+        const isBroadcast = args[0]?.toLowerCase() === 'broadcast';
+        if (isBroadcast) {
+          if (!this.checkAdminPermission(senderJid, senderName)) {
+            return {
+              handled: true,
+              replyText: '⛔ La difusión masiva de novedades está reservada para el administrador.'
+            };
+          }
+          if (this.schedulerService) {
+            const msg = buildUpdateBroadcastMessage(CURRENT_VERSION);
+            const sent = await this.schedulerService.broadcastCustomMessage(msg);
+            return {
+              handled: true,
+              replyText: `📢 Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s).`
+            };
+          }
+        }
+
+        return {
+          handled: true,
+          replyText: buildUpdateBroadcastMessage(CURRENT_VERSION)
+        };
+      }
+
       case 'version':
       case 'v': {
         const reply = [
           '🤖 *MEQUETREFE BOT - ESTADO DEL SISTEMA*',
           '---------------------------------------',
-          '📦 *Versión:* v1.1.0',
+          `📦 *Versión:* v${CURRENT_VERSION.version}`,
           '🚀 *Entorno:* Windows Server VPS (PM2 24/7)',
           '🔄 *Sincronización:* GitHub Actions Auto-Deploy Activo',
-          '🧠 *IA:* Meta AI + Groq Qwen Fallback',
+          '🧠 *IA:* Meta AI + Groq Qwen Fallback (Contexto Aislado)',
           '🛡️ *Guardrails:* Rate Limiting, Batería Social & DMs',
           '✨ *Módulos:* Horóscopo, Noticias, Resúmenes, Apodos & Efemérides',
           '---------------------------------------',
-          '💡 _Todo marchando de diez fiera!_'
+          '💡 _Tirá `/novedades` para ver las mejoras de esta versión o `/ayuda`!_'
         ].join('\n');
         return { handled: true, replyText: reply };
       }

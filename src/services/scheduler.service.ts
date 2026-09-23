@@ -9,7 +9,8 @@ import { getTodayCordoba } from '../utils/date.js';
 
 export interface SchedulerTargetAdapter {
   sendMessage(groupJid: string, text: string, options?: { mentions?: string[] }): Promise<void>;
-  getTargetGroupJid(): string;
+  getTargetGroupJid?(): string;
+  getTargetGroupJids?(): string[];
   getBotCleanJid(): string;
 }
 
@@ -28,6 +29,20 @@ export class SchedulerService {
     private adapter: SchedulerTargetAdapter,
     private timezone: string = 'America/Argentina/Cordoba'
   ) {}
+
+  public getTargetGroups(): string[] {
+    if (this.adapter.getTargetGroupJids) {
+      const list = this.adapter.getTargetGroupJids();
+      if (Array.isArray(list) && list.length > 0) {
+        return Array.from(new Set(list.filter(Boolean)));
+      }
+    }
+    if (this.adapter.getTargetGroupJid) {
+      const single = this.adapter.getTargetGroupJid();
+      if (single) return [single];
+    }
+    return [];
+  }
 
   public start(): void {
     if (this.timer) return;
@@ -58,8 +73,8 @@ export class SchedulerService {
 
     try {
       const now = overrideDate || new Date();
-      const targetGroupJid = this.adapter.getTargetGroupJid();
-      if (!targetGroupJid) return;
+      const targetGroups = this.getTargetGroups();
+      if (targetGroups.length === 0) return;
 
       const cordobaFormatter = new Intl.DateTimeFormat('es-AR', {
         timeZone: this.timezone,
@@ -80,21 +95,35 @@ export class SchedulerService {
         }
       }
 
-      // 2. Mensaje Diario Matutino (08:00)
+      // 2. Mensaje Diario Matutino (08:00) para todos los grupos autorizados
       if (timeStr === '08:00') {
-        const jobKey = `daily_morning_message:${targetGroupJid}:${today}`;
-        if (!this.jobExecutionRepo.isJobExecuted(jobKey)) {
-          console.log(`☀️ [Scheduler] Generando mensaje matutino de las 08:00...`);
-          await this.sendMorningBriefing(targetGroupJid, false, jobKey, now);
+        let morningNews: import('./news.service.js').TechNewsItem[] | undefined;
+        for (const targetGroupJid of targetGroups) {
+          const jobKey = `daily_morning_message:${targetGroupJid}:${today}`;
+          if (!this.jobExecutionRepo.isJobExecuted(jobKey)) {
+            console.log(`☀️ [Scheduler] Generando mensaje matutino para ${targetGroupJid} (${today})...`);
+            if (!morningNews) {
+              morningNews = await this.newsService.getLatestUnpublishedNews(3);
+            }
+            await this.sendMorningBriefing(targetGroupJid, false, jobKey, now, morningNews);
+            if (targetGroups.length > 1) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+          }
         }
       }
 
       // 3. Aviso Preventivo de Cumpleaños de Mañana (12:00)
       if (timeStr === '12:00') {
-        const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
-        if (advanceNotice) {
-          console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños de mañana...`);
-          await this.adapter.sendMessage(targetGroupJid, advanceNotice);
+        for (const targetGroupJid of targetGroups) {
+          const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
+          if (advanceNotice) {
+            console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños para ${targetGroupJid}...`);
+            await this.adapter.sendMessage(targetGroupJid, advanceNotice);
+            if (targetGroups.length > 1) {
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          }
         }
       }
 
@@ -102,13 +131,21 @@ export class SchedulerService {
       const minute = now.getMinutes();
       if (minute === 0 || minute === 30) {
         const botJid = this.adapter.getBotCleanJid();
-        const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid, now);
-        if (inactivityResult) {
-          const logType = inactivityResult.type === 'ghost_alert' ? '👻 [Scheduler] Alerta de miembro ausente (+7 días)...' : '🤖 [Scheduler] Reactivando grupo inactivo...';
-          console.log(logType);
-          await this.adapter.sendMessage(targetGroupJid, inactivityResult.text, {
-            mentions: inactivityResult.mentionedJid ? [inactivityResult.mentionedJid] : []
-          });
+        for (const targetGroupJid of targetGroups) {
+          const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid, now);
+          if (inactivityResult) {
+            const logType =
+              inactivityResult.type === 'ghost_alert'
+                ? `👻 [Scheduler] Alerta de miembro ausente en ${targetGroupJid}...`
+                : `🤖 [Scheduler] Reactivando grupo ${targetGroupJid}...`;
+            console.log(logType);
+            await this.adapter.sendMessage(targetGroupJid, inactivityResult.text, {
+              mentions: inactivityResult.mentionedJid ? [inactivityResult.mentionedJid] : []
+            });
+            if (targetGroups.length > 1) {
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          }
         }
       }
     } catch (err: any) {
@@ -127,7 +164,8 @@ export class SchedulerService {
     targetJid: string,
     isTest: boolean = false,
     jobKey?: string,
-    date?: Date
+    date?: Date,
+    prefetchedNews?: import('./news.service.js').TechNewsItem[]
   ): Promise<void> {
     const now = date || new Date();
 
@@ -171,8 +209,11 @@ export class SchedulerService {
     const mainGreetingMessage = greetingSections.join('\n');
     await this.adapter.sendMessage(targetJid, mainGreetingMessage);
 
-    // 5. Obtener 3 noticias inéditas (3 aleatorias entre las 4 fuentes disponibles)
-    const newsItems = await this.newsService.getLatestUnpublishedNews(3);
+    // 5. Obtener 3 noticias (prefetched o inéditas de las fuentes disponibles)
+    const newsItems =
+      prefetchedNews && prefetchedNews.length > 0
+        ? prefetchedNews
+        : await this.newsService.getLatestUnpublishedNews(3);
 
     // Despacho secuencial en mensajes separados con un pequeño intervalo
     const messageDelayMs = isTest ? 300 : 1200;
@@ -182,10 +223,30 @@ export class SchedulerService {
       await this.adapter.sendMessage(targetJid, singleNewsMessage);
     }
 
-    // Registrar idempotencia si es la ejecución programada de las 09:00
+    // Registrar idempotencia si es la ejecución programada de las 08:00
     if (!isTest && jobKey) {
       this.jobExecutionRepo.recordJobExecution(jobKey, targetJid);
     }
+  }
+
+  /**
+   * Despacha un mensaje a todos los grupos autorizados registrados
+   */
+  public async broadcastCustomMessage(text: string): Promise<string[]> {
+    const groups = this.getTargetGroups();
+    const sentGroups: string[] = [];
+    for (const jid of groups) {
+      try {
+        await this.adapter.sendMessage(jid, text);
+        sentGroups.push(jid);
+        if (groups.length > 1) {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      } catch (e: any) {
+        console.error(`❌ [Scheduler] Error enviando broadcast a ${jid}:`, e?.message || e);
+      }
+    }
+    return sentGroups;
   }
 
   /**

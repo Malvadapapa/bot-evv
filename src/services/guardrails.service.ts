@@ -497,4 +497,8 @@ export class GuardrailsService {
   public findUserByAlias(aliasWord: string): UserAlias | null {
     return this.guardrailsRepo.findUserByAlias(aliasWord);
   }
+
+  public getAllAuthorizedGroups(): Array<{ groupJid: string; groupName: string; introSent: boolean }> {
+    return this.guardrailsRepo.getAllAuthorizedGroups();
+  }
 }

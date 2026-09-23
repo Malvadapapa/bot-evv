@@ -11,6 +11,7 @@ import pino from 'pino';
 
 import { env } from './config/env.js';
 import { character } from './config/character.js';
+import { CURRENT_VERSION, buildUpdateBroadcastMessage } from './config/changelog.js';
 import {
   Database,
   MessageRepository,
@@ -90,7 +91,13 @@ const inactivityService = new InactivityService(messageRepo, statsRepo, aiServic
   ghostAlertCooldownMs: env.GHOST_ALERT_COOLDOWN_HOURS * 3600000
 });
 
-// 5. Adapter y Servicio de Automatización / Scheduler (00:00, 09:00, 12:00, Inactividad)
+const guardrailsService = new GuardrailsService(guardrailsRepo, {
+  botInstanceId: 'bot-principal',
+  initialAdminSuffixes: env.ADMIN_PHONE_SUFFIX.split(',').map((s) => s.trim()),
+  targetGroupJid: env.TARGET_GROUP_JID
+});
+
+// 5. Adapter y Servicio de Automatización / Scheduler (00:00, 08:00, 12:00, Inactividad)
 const schedulerAdapter: SchedulerTargetAdapter = {
   sendMessage: async (groupJid: string, text: string, options?: { mentions?: string[] }) => {
     if (env.DRY_RUN) {
@@ -103,6 +110,14 @@ const schedulerAdapter: SchedulerTargetAdapter = {
         mentions: options?.mentions
       });
     }
+  },
+  getTargetGroupJids: () => {
+    const authorized = guardrailsService.getAllAuthorizedGroups();
+    const jids = authorized.map((g) => g.groupJid);
+    if (env.TARGET_GROUP_JID && !jids.includes(env.TARGET_GROUP_JID)) {
+      jids.push(env.TARGET_GROUP_JID);
+    }
+    return jids;
   },
   getTargetGroupJid: () => env.TARGET_GROUP_JID,
   getBotCleanJid: () => {
@@ -122,12 +137,6 @@ const scheduler = new SchedulerService(
   schedulerAdapter,
   env.TIMEZONE
 );
-
-const guardrailsService = new GuardrailsService(guardrailsRepo, {
-  botInstanceId: 'bot-principal',
-  initialAdminSuffixes: env.ADMIN_PHONE_SUFFIX.split(',').map((s) => s.trim()),
-  targetGroupJid: env.TARGET_GROUP_JID
-});
 
 const commandService = new CommandService(
   summaryService,
@@ -225,6 +234,22 @@ async function startBot(): Promise<void> {
 
       // Iniciar scheduler de tareas programadas
       scheduler.start();
+
+      // Difusión automática de novedades de versión tras conectarse
+      setTimeout(async () => {
+        try {
+          const lastVersion = guardrailsRepo.getConfig('last_broadcast_version', '');
+          if (lastVersion !== CURRENT_VERSION.version) {
+            console.log(`📢 [Changelog] Nueva versión detectada: v${CURRENT_VERSION.version} (previa: "${lastVersion || 'ninguna'}"). Difundiendo novedades a los grupos...`);
+            const updateMsg = buildUpdateBroadcastMessage(CURRENT_VERSION);
+            const sent = await scheduler.broadcastCustomMessage(updateMsg);
+            guardrailsRepo.setConfig('last_broadcast_version', CURRENT_VERSION.version);
+            console.log(`✅ [Changelog] Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s).`);
+          }
+        } catch (err: any) {
+          console.warn(`⚠️ [Changelog] Error difundiendo novedades de versión:`, err?.message || err);
+        }
+      }, 6000);
     }
   });
 
