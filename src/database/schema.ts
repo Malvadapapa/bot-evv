@@ -155,4 +155,22 @@ CREATE TABLE IF NOT EXISTS user_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_user_aliases_alias ON user_aliases(alias);
 CREATE INDEX IF NOT EXISTS idx_user_aliases_phone ON user_aliases(user_phone);
+
+-- 16. Recordatorios y Avisos Programados
+CREATE TABLE IF NOT EXISTS scheduled_reminders (
+  id TEXT PRIMARY KEY,
+  group_jid TEXT NOT NULL,
+  created_by_jid TEXT NOT NULL,
+  created_by_name TEXT NOT NULL,
+  target_jid TEXT,                      -- JID de quien debe ser etiquetado o '@all' o NULL
+  target_name TEXT,
+  message TEXT NOT NULL,
+  target_timestamp INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'sent' | 'cancelled'
+  created_at INTEGER NOT NULL,
+  sent_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_status_time ON scheduled_reminders(status, target_timestamp);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_active ON scheduled_reminders(created_by_jid, status);
+CREATE INDEX IF NOT EXISTS idx_reminders_group ON scheduled_reminders(group_jid, status);
 `;

@@ -6,6 +6,7 @@ import { WeatherService } from './weather.service.js';
 import { AIService } from './ai.service.js';
 import { JobExecutionRepository } from '../database/repositories/job-execution.repository.js';
 import { getTodayCordoba } from '../utils/date.js';
+import type { ReminderService } from './reminder.service.js';
 
 export interface SchedulerTargetAdapter {
   sendMessage(groupJid: string, text: string, options?: { mentions?: string[] }): Promise<void>;
@@ -27,7 +28,8 @@ export class SchedulerService {
     private aiService: AIService,
     private jobExecutionRepo: JobExecutionRepository,
     private adapter: SchedulerTargetAdapter,
-    private timezone: string = 'America/Argentina/Cordoba'
+    private timezone: string = 'America/Argentina/Cordoba',
+    private reminderService?: ReminderService
   ) {}
 
   public getTargetGroups(): string[] {
@@ -73,6 +75,24 @@ export class SchedulerService {
 
     try {
       const now = overrideDate || new Date();
+
+      // 0. Avisos y Recordatorios Programados (verificación continua cada tick)
+      if (this.reminderService) {
+        const dueReminders = this.reminderService.getDueReminders(now.getTime());
+        for (const reminder of dueReminders) {
+          try {
+            const delivery = this.reminderService.formatDeliveryMessage(reminder);
+            console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid}...`);
+            await this.adapter.sendMessage(reminder.groupJid, delivery.text, {
+              mentions: delivery.mentions
+            });
+            this.reminderService.markAsSent(reminder.id);
+          } catch (e: any) {
+            console.error(`❌ [Scheduler] Error entregando recordatorio ${reminder.id}:`, e?.message || e);
+          }
+        }
+      }
+
       const targetGroups = this.getTargetGroups();
       if (targetGroups.length === 0) return;
 

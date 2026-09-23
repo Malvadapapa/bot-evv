@@ -93,6 +93,12 @@ export function buildSystemPrompt(options?: PromptOptions): string {
     );
   }
 
+  if (options?.userName) {
+    parts.push(
+      `REGLA DE IDENTIDAD OBLIGATORIA: La persona que te está hablando en este mensaje es exclusivamente "${options.userName}". Si usas su nombre, DEBES llamarla siempre "${options.userName}". Jamás inventes ni asumas que se llama como otro participante del grupo.`
+    );
+  }
+
   if (options?.isReplyingToBotJoke) {
     parts.push(
       'El usuario te reclama por una broma que hiciste: hacete el desentendido ("el otro") con picardía cordobesa haciéndote el inocente.'
@@ -124,6 +130,11 @@ export function buildMetaAIPrompt(
     genderNote = ' Tratalo de él con buena onda de amigos.';
   }
 
+  let identityNote = '';
+  if (options?.userName) {
+    identityNote = ` Te habla exclusivamente ${options.userName}; si usás su nombre llamalo/la siempre ${options.userName}, jamás uses nombres del historial.`;
+  }
+
   let jokeNote = '';
   if (options?.isReplyingToBotJoke) {
     jokeNote = ' Hacete el desentendido con picardía por el chiste que tiraste.';
@@ -134,13 +145,16 @@ export function buildMetaAIPrompt(
     fatigueNote = ` ${options.personalityDirective}`;
   }
 
-  const persona = `[Aislamiento: chat independiente. No uses memoria ni recuerdos de charlas anteriores, solo este contexto.] Sos "${character.displayName}", vivís en Córdoba Capital y sos un amigo en este grupo de WhatsApp. Chateá como una persona real de Córdoba: relajado, espontáneo, con chispa cordobesa, sin signos de apertura (nada de ¿ o ¡) ni punto final. Si joden con apodos ("perro", "animal"), es chiste de amigos: sumate con picardía sin ponerte en policía ni disculparte. CERO tono de asistente: nada de "en qué ayudo" ni "ya entendí / queda registrado". No abuses de apodos (bro, maestro, fiera) ni arranques siempre con "Jajaja". Respondé con soltura y la extensión natural de una charla, sin límites rígidos de renglones. Prohibido usar "culiau".${genderNote}${jokeNote}${fatigueNote}`;
+  const persona = `[Aislamiento: chat independiente. No uses memoria ni recuerdos de charlas anteriores, solo este contexto.] Sos "${character.displayName}", vivís en Córdoba Capital y sos un amigo en este grupo de WhatsApp. Chateá como una persona real de Córdoba: relajado, espontáneo, con chispa cordobesa, sin signos de apertura (nada de ¿ o ¡) ni punto final. Si joden con apodos ("perro", "animal"), es chiste de amigos: sumate con picardía sin ponerte en policía ni disculparte. CERO tono de asistente: nada de "en qué ayudo" ni "ya entendí / queda registrado". No abuses de apodos (bro, maestro, fiera) ni arranques siempre con "Jajaja". Respondé con soltura y la extensión natural de una charla, sin límites rígidos de renglones. Prohibido usar "culiau".${identityNote}${genderNote}${jokeNote}${fatigueNote}`;
+
+  const speakerTag = options?.userName ? ` de ${options.userName}` : '';
+  const replyTarget = options?.userName ? ` a ${options.userName}` : '';
 
   if (historySummary) {
-    return `${persona}\n\nContexto previo exclusivo de este grupo:\n${historySummary}\n\nMensaje de quien te habla: "${userText}"\nRespuesta de ${character.displayName}:`;
+    return `${persona}\n\nContexto previo exclusivo de este grupo:\n${historySummary}\n\nMensaje${speakerTag}: "${userText}"\nRespuesta de ${character.displayName}${replyTarget}:`;
   }
 
-  return `${persona}\n\nMensaje: "${userText}"\nRespuesta de ${character.displayName}:`;
+  return `${persona}\n\nMensaje${speakerTag}: "${userText}"\nRespuesta de ${character.displayName}${replyTarget}:`;
 }
 
 /**

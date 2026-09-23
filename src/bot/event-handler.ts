@@ -14,6 +14,7 @@ import { AIService } from '../services/ai.service.js';
 import { character } from '../config/character.js';
 import type { ChatMessage } from '../ai/types.js';
 import type { GuardrailsService } from '../services/guardrails.service.js';
+import type { ReminderService } from '../services/reminder.service.js';
 
 export interface EventHandlerConfig {
   getSocket: () => WASocket | null;
@@ -24,6 +25,7 @@ export interface EventHandlerConfig {
   aiService: AIService;
   guardrailsService?: GuardrailsService;
   birthdayRepo?: BirthdayRepository;
+  reminderService?: ReminderService;
   botCleanJid?: string;
   botLid?: string;
   targetGroupJid?: string;
@@ -186,7 +188,8 @@ export class EventHandler {
           remoteJid,
           senderJid,
           pushName,
-          text
+          text,
+          mentionedJids
         );
 
         if (cmdResult.handled && cmdResult.replyText) {
@@ -337,6 +340,75 @@ export class EventHandler {
     this.userCooldowns.set(senderJid, now);
     this.groupCooldowns.set(remoteJid, now);
 
+    // 8.5. Intercepción de recordatorios en lenguaje natural (ej: "Mequetrefe avisá a las 18:00 que compren hielo")
+    if (this.config.reminderService) {
+      const candidateReminderText = text.replace(/^@\S+\s+/i, '').trim();
+      const reminderParsed = this.config.reminderService.parseReminderRequest(
+        candidateReminderText,
+        senderJid,
+        pushName,
+        mentionedJids
+      );
+
+      if (reminderParsed.isReminder) {
+        if (reminderParsed.error || !reminderParsed.targetTimestamp || !reminderParsed.timeLabel || !reminderParsed.message) {
+          const errReply = reminderParsed.error || '⚠️ No pude entender el horario del aviso. Probá con: "a las 18:00", "en 30m" o "mañana a las 9am".';
+          if (this.config.dryRun) {
+            console.log(`🧪 [DRY_RUN Recordatorio] Error: ${errReply}`);
+          } else {
+            await sock.sendMessage(remoteJid, { text: errReply }, { quoted: msg });
+          }
+          return;
+        }
+
+        const isAdmin = this.config.commandService.checkAdminPermission(senderJid, pushName);
+        const result = this.config.reminderService.createReminder({
+          groupJid: remoteJid,
+          createdByJid: senderJid,
+          createdByName: pushName,
+          message: reminderParsed.message,
+          targetTimestamp: reminderParsed.targetTimestamp,
+          timeLabel: reminderParsed.timeLabel,
+          targetJid: reminderParsed.targetJid,
+          targetName: reminderParsed.targetName,
+          isGroupBroadcast: reminderParsed.isGroupBroadcast,
+          isAdmin
+        });
+
+        if (!result.success || !result.reminder) {
+          const errMsg = `⚠️ ${result.error || 'No se pudo agendar el recordatorio.'}`;
+          if (this.config.dryRun) {
+            console.log(`🧪 [DRY_RUN Recordatorio] Límite: ${errMsg}`);
+          } else {
+            await sock.sendMessage(remoteJid, { text: errMsg }, { quoted: msg });
+          }
+          return;
+        }
+
+        const confirmMsg = this.config.reminderService.formatConfirmationMessage(
+          result.reminder,
+          reminderParsed.timeLabel
+        );
+
+        if (this.config.dryRun) {
+          console.log(`🧪 [DRY_RUN Recordatorio] Confirmado: ${confirmMsg}`);
+        } else {
+          const sent = await sock.sendMessage(remoteJid, { text: confirmMsg }, { quoted: msg });
+          const botMsgId = sent?.key?.id || `bot-${Date.now()}`;
+          this.addProcessedId(botMsgId);
+          this.config.messageRepo.save({
+            id: botMsgId,
+            groupJid: remoteJid,
+            senderJid: botCleanJid,
+            senderName: character.displayName,
+            content: confirmMsg,
+            timestamp: Date.now()
+          });
+        }
+        return;
+      }
+    }
+
     // 9. Generar respuesta conversacional vía IA con contexto real y género
     try {
       console.log(`🎯 [Interacción] ${pushName} habló con el bot en ${remoteJid}: "${text}"`);
@@ -416,14 +488,12 @@ export class EventHandler {
         if (now - lastOnboardingPrompt >= onboardingCooldown) {
           this.userOnboardingCooldowns.set(senderJid, now);
           this.config.guardrailsService?.setConfig(`onboard_prompt:${senderJid}`, String(now));
-          const msgCount = this.config.messageRepo.getMessageCountBySender(senderJid);
-          // msgCount <= 1 significa que es su primera interacción registrada
-          const isFirstTime = msgCount <= 1;
+          const isNeverRegistered = !userProfile;
 
-          if (isFirstTime) {
-            aiReply += '\n\n🐶 *P.D.:* ¡Che, como es la primera vez que charlamos, me decís cuándo cumplís años y si preferís que te trate de él o ella así te tengo en mi lista? (tirame un `/registrarse DD/MM [el/ella]`) 🎂✨';
+          if (isNeverRegistered) {
+            aiReply += '\n\n¡Che, no te tengo en mi lista! Si querés que te salude para tu cumple y sepa cómo tratarte, tirame un `/registrarse DD/MM el` (o `ella`) 😉🎂';
           } else {
-            aiReply += '\n\n🐶 *P.D.:* ¡Uh, sabés qué? Me actualizaron la base de datos en Excel (cosas de perro tecnológico 🐾💾) y se me traspapelaron tus datos... ¿cuándo cumplís y preferís que te trate de él o ella? Tirame un `/registrarse DD/MM [el/ella]` así te tengo en la lista genio/genia! 🎂✨';
+            aiReply += '\n\n¡Che, sabés qué? Se me traspapelaron algunos de tus datos... ¿cuándo cumplís y preferís que te trate de él o ella? Tirame un `/registrarse DD/MM el` (o `ella`) así te anoto bien! 😉🎂';
           }
         }
       }

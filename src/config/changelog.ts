@@ -11,24 +11,39 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.0',
+  version: '1.2.1',
   date: '23/09/2026',
-  title: 'Aislamiento de contexto por grupo, Multi-grupo en Scheduler y Changelog automático',
+  title: 'Avisos y recordatorios programados, identidad estricta y mejoras en registro',
   highlights: [
-    'Aislamiento estricto de contexto entre grupos para que no se mezclen las conversaciones ni recuerdos',
-    'El saludo matutino, clima y noticias ahora se envían a todos los grupos autorizados (EVV y pruebas)',
-    'Sistema automático de resumen de versión con novedades y arreglos cada vez que se actualiza el bot',
-    'Nuevo comando /novedades (o /changelog) para consultar las mejoras y cambios recientes'
+    'Sistema de avisos y recordatorios por chat (/recordar o en lenguaje natural)',
+    'Soporte para recordar a un tercero (@usuario), a todo el grupo (@todos) o auto-recordatorio',
+    'Límite de 2 recordatorios por usuario y administración por privado'
   ],
   fixes: [
-    'Corregido el scheduler para no limitar el saludo diario y noticias a un único grupo de pruebas',
-    'Corregida la fuga de contexto entre chats grupales en las respuestas con Meta AI',
-    'Corregido el mensaje de bienvenida/onboarding para evitar duplicaciones'
+    'Regla estricta de identidad: el bot respeta siempre el nombre real de WhatsApp y no inventa nombres ajenos',
+    'El comando /registrarse ahora acepta fecha y pronombre juntos en una sola línea y tolera corchetes [ ]',
+    'Bienvenida a nuevos usuarios corregida sin mensajes confusos'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.0',
+    date: '23/09/2026',
+    title: 'Aislamiento de contexto por grupo, Multi-grupo en Scheduler y Changelog automático',
+    highlights: [
+      'Aislamiento estricto de contexto entre grupos para que no se mezclen las conversaciones ni recuerdos',
+      'El saludo matutino, clima y noticias ahora se envían a todos los grupos autorizados (EVV y pruebas)',
+      'Sistema automático de resumen de versión con novedades y arreglos cada vez que se actualiza el bot',
+      'Nuevo comando /novedades (o /changelog) para consultar las mejoras y cambios recientes'
+    ],
+    fixes: [
+      'Corregido el scheduler para no limitar el saludo diario y noticias a un único grupo de pruebas',
+      'Corregida la fuga de contexto entre chats grupales en las respuestas con Meta AI',
+      'Corregido el mensaje de bienvenida/onboarding para evitar duplicaciones'
+    ]
+  },
   {
     version: '1.1.0',
     date: '22/09/2026',
@@ -56,13 +71,32 @@ export const CHANGELOG_HISTORY: ReleaseNote[] = [
 ];
 
 /**
- * Plantilla amigable de WhatsApp para comunicar la actualización a los grupos
+ * Plantilla amigable de WhatsApp para comunicar la actualización a los grupos.
+ * Si es una segunda actualización en el mismo día, genera un mensaje con tono de continuidad.
  */
-export function buildUpdateBroadcastMessage(release: ReleaseNote = CURRENT_VERSION): string {
+export function buildUpdateBroadcastMessage(
+  release: ReleaseNote = CURRENT_VERSION,
+  isSameDayContinuation: boolean = false
+): string {
   const highlightsList = release.highlights.map((h) => `• ${h}`).join('\n');
   const fixesList = release.fixes.length > 0
     ? `\n\n🔧 *Correcciones y Ajustes:*\n${release.fixes.map((f) => `• ${f}`).join('\n')}`
     : '';
+
+  if (isSameDayContinuation) {
+    return [
+      `🚀 *¡Mequetrefe sumó más mejoras hoy! (v${release.version})* 🐶✨`,
+      `---------------------------------------`,
+      `¡Gente! Se acaban de incorporar más cambios y ajustes hoy completando la actualización anterior:`,
+      '',
+      `✨ *Novedades:*`,
+      highlightsList,
+      fixesList,
+      '',
+      `---------------------------------------`,
+      `💡 _Pueden ver todos los cambios acumulados poniendo \`/version\` 😉_`
+    ].join('\n');
+  }
 
   return [
     `🚀 *¡Mequetrefe se actualizó a la versión v${release.version}!* 🐶✨`,

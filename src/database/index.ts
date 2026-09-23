@@ -9,3 +9,4 @@ export * from './repositories/job-execution.repository.js';
 export * from './repositories/news.repository.js';
 export * from './repositories/horoscope.repository.js';
 export * from './repositories/guardrails.repository.js';
+export * from './repositories/reminder.repository.js';

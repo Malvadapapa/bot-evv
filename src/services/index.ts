@@ -11,3 +11,4 @@ export * from './scheduler.service.js';
 export * from './weather.service.js';
 export * from './horoscope.service.js';
 export * from './guardrails.service.js';
+export * from './reminder.service.js';

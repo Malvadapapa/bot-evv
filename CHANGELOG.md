@@ -4,6 +4,20 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.1] - 2026-09-23
+### ✨ Novedades y Mejoras
+- **Sistema de avisos y recordatorios programados:** Soporte para programar recordatorios por chat en lenguaje natural o vía `/recordar <tiempo> <mensaje>`.
+- **Menciones destinatarias:** Soporte para recordar a un tercero (`@usuario`), a todo el grupo (`@todos`) o auto-recordatorio personal.
+- **Límites de uso y panel de admin en privado:** Límite de 2 recordatorios activos por usuario común (sin límite para administradores) y gestión completa por mensaje privado (DM).
+- **Changelog continuo:** Detección de múltiples actualizaciones en el mismo día con mensaje de continuidad y comando `/version` con desglose detallado de novedades y correcciones.
+
+### 🔧 Correcciones
+- **Identidad real de usuarios:** Inyección obligatoria del nombre real de WhatsApp (`userName`) en los prompts de IA con prohibición estricta de inferir o inventar nombres ajenos (soluciona la confusión de nombres como "Pablo" vs "Leandro").
+- **Parser tolerante de `/registrarse`:** Soporte completo para entradas con corchetes `[ ]` o paréntesis (ej: `/registrarse 27/06 [el]`), y registro atómico de fecha + pronombre en una sola línea.
+- **Onboarding limpio para nuevos usuarios:** Bienvenida cordial sin el chiste confuso de base de datos en Excel y sin corchetes en los ejemplos de comando.
+
+---
+
 ## [v1.2.0] - 2026-09-23
 ### ✨ Novedades y Mejoras
 - **Aislamiento estricto de contexto entre grupos:** Cada grupo tiene su propio historial y contexto aislado; Meta AI y los LLMs ya no mezclan temas ni personas entre distintos grupos.

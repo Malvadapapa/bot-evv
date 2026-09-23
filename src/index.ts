@@ -22,7 +22,8 @@ import {
   JobExecutionRepository,
   NewsRepository,
   HoroscopeRepository,
-  GuardrailsRepository
+  GuardrailsRepository,
+  ReminderRepository
 } from './database/index.js';
 import { MetaAIProvider } from './ai/providers/meta-ai.provider.js';
 import { ExternalLLMProvider } from './ai/providers/external-llm.provider.js';
@@ -40,9 +41,11 @@ import {
   WeatherService,
   HoroscopeService,
   GuardrailsService,
+  ReminderService,
   type SchedulerTargetAdapter
 } from './services/index.js';
 import { EventHandler } from './bot/event-handler.js';
+import { getTodayCordoba } from './utils/date.js';
 
 let currentSocket: WASocket | null = null;
 const getSocket = () => currentSocket;
@@ -61,6 +64,7 @@ const jobExecutionRepo = new JobExecutionRepository(db);
 const newsRepo = new NewsRepository(db);
 const horoscopeRepo = new HoroscopeRepository(db);
 const guardrailsRepo = new GuardrailsRepository(db);
+const reminderRepo = new ReminderRepository(db);
 
 // 3. Configuración de Proveedores de IA
 const metaAiProvider = new MetaAIProvider(env.META_AI_BRIDGE_URL, env.META_AI_TIMEOUT_MS);
@@ -96,6 +100,8 @@ const guardrailsService = new GuardrailsService(guardrailsRepo, {
   initialAdminSuffixes: env.ADMIN_PHONE_SUFFIX.split(',').map((s) => s.trim()),
   targetGroupJid: env.TARGET_GROUP_JID
 });
+
+const reminderService = new ReminderService(reminderRepo, env.TIMEZONE, guardrailsService);
 
 // 5. Adapter y Servicio de Automatización / Scheduler (00:00, 08:00, 12:00, Inactividad)
 const schedulerAdapter: SchedulerTargetAdapter = {
@@ -135,7 +141,8 @@ const scheduler = new SchedulerService(
   aiService,
   jobExecutionRepo,
   schedulerAdapter,
-  env.TIMEZONE
+  env.TIMEZONE,
+  reminderService
 );
 
 const commandService = new CommandService(
@@ -149,7 +156,8 @@ const commandService = new CommandService(
   horoscopeService,
   aiService,
   env.ADMIN_PHONE_SUFFIX,
-  guardrailsService
+  guardrailsService,
+  reminderService
 );
 
 // 6. Router de Eventos y Mensajes (Regla 1: activado ante @Bot, cita o intervención espontánea sobre miembros clave)
@@ -162,6 +170,7 @@ const eventHandler = new EventHandler({
   aiService,
   guardrailsService,
   birthdayRepo,
+  reminderService,
   targetGroupJid: env.TARGET_GROUP_JID,
   userCooldownMs: env.COOLDOWN_USER_MS,
   groupCooldownMs: env.COOLDOWN_GROUP_MS,
@@ -239,12 +248,17 @@ async function startBot(): Promise<void> {
       setTimeout(async () => {
         try {
           const lastVersion = guardrailsRepo.getConfig('last_broadcast_version', '');
+          const lastDate = guardrailsRepo.getConfig('last_broadcast_date', '');
+          const today = getTodayCordoba();
+
           if (lastVersion !== CURRENT_VERSION.version) {
             console.log(`📢 [Changelog] Nueva versión detectada: v${CURRENT_VERSION.version} (previa: "${lastVersion || 'ninguna'}"). Difundiendo novedades a los grupos...`);
-            const updateMsg = buildUpdateBroadcastMessage(CURRENT_VERSION);
+            const isContinuation = lastDate === today && lastVersion !== '';
+            const updateMsg = buildUpdateBroadcastMessage(CURRENT_VERSION, isContinuation);
             const sent = await scheduler.broadcastCustomMessage(updateMsg);
             guardrailsRepo.setConfig('last_broadcast_version', CURRENT_VERSION.version);
-            console.log(`✅ [Changelog] Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s).`);
+            guardrailsRepo.setConfig('last_broadcast_date', today);
+            console.log(`✅ [Changelog] Novedades v${CURRENT_VERSION.version} enviadas con éxito a ${sent.length} grupo(s). (Continuación hoy: ${isContinuation})`);
           }
         } catch (err: any) {
           console.warn(`⚠️ [Changelog] Error difundiendo novedades de versión:`, err?.message || err);

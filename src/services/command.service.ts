@@ -9,6 +9,7 @@ import type { NewsService } from './news.service.js';
 import type { HoroscopeService, ZodiacSignInfo } from './horoscope.service.js';
 import type { AIService } from './ai.service.js';
 import type { GuardrailsService } from './guardrails.service.js';
+import type { ReminderService } from './reminder.service.js';
 import { getRandomFemaleAffirmation } from '../config/character.js';
 import { CURRENT_VERSION, buildUpdateBroadcastMessage } from '../config/changelog.js';
 
@@ -32,7 +33,8 @@ export class CommandService {
     private horoscopeService?: HoroscopeService,
     private aiService?: AIService,
     private adminPhoneSuffix: string = '3811',
-    private guardrailsService?: GuardrailsService
+    private guardrailsService?: GuardrailsService,
+    private reminderService?: ReminderService
   ) {}
 
   public isCommand(text: string): boolean {
@@ -48,7 +50,8 @@ export class CommandService {
     groupJid: string,
     senderJid: string,
     senderName: string,
-    text: string
+    text: string,
+    mentionedJids: string[] = []
   ): Promise<CommandExecutionResult> {
     const cleanText = text.replace(/^@\S+\s+/i, '').trim();
     const isExplicitCmd =
@@ -195,67 +198,52 @@ export class CommandService {
                 : ' _(sin preferencia de él/ella configurada)_';
             return {
               handled: true,
-              replyText: `🎂 Tu fecha de registro es el *${existing.day}/${existing.month}*${genderLabel}.\n\n_Para actualizar fecha: /registrarse DD/MM [el/ella]_\n_Para configurar tu pronombre: /registrarse el  o  /registrarse ella_`
+              replyText: `🎂 Tu fecha de registro es el *${existing.day}/${existing.month}*${genderLabel}.\n\n_Para actualizar fecha o pronombre: /registrarse DD/MM el  o  /registrarse DD/MM ella_`
             };
           }
           return {
             handled: true,
-            replyText: `📝 Aún no te has registrado.\nUsa */registrarse DD/MM [el/ella]* (ej: /registrarse 15/05 el  o  /registrarse 15/05 ella) para registrar tu cumpleaños y saber cómo tratarte cuando hablemos 🎉.`
+            replyText: `📝 Aún no te has registrado.\nUsa */registrarse DD/MM el* o */registrarse DD/MM ella* (ej: */registrarse 15/05 el*) para registrar tu cumpleaños y saber cómo tratarte cuando hablemos 🎉.`
           };
         }
 
-        const firstArg = args[0].toLowerCase();
+        const parsed = this.birthdayService.parseRegistrationInput(args.join(' '));
 
-        // Actualización directa de pronombre / género (ej: /registrarse el o /registrarse ella)
-        if (firstArg === 'el' || firstArg === 'él' || firstArg === 'ella') {
-          const gender = firstArg === 'ella' ? 'female' : 'male';
-          const genderText = gender === 'female' ? 'ella' : 'él';
-          const vocativo = gender === 'female' ? 'genia' : 'crack';
-          this.birthdayService.updateGender(senderJid, gender);
+        // Caso 1: Solo envió pronombre/género
+        if (!parsed.hasDate && parsed.hasGender && parsed.gender) {
+          const genderText = parsed.gender === 'female' ? 'ella' : 'él';
+          const vocativo = parsed.gender === 'female' ? 'genia' : 'crack';
+          this.birthdayService.updateGender(senderJid, parsed.gender);
           return {
             handled: true,
             replyText: `✅ ¡Anotado ${vocativo}! De ahora en adelante me referiré a vos como *${genderText}*. ¡Gracias por avisarme! 😊✨`
           };
         }
 
-        const dateParsed = this.birthdayService.parseBirthday(args[0]);
-        if (!dateParsed) {
+        // Caso 2: Formato inválido sin fecha válida ni pronombre
+        if (!parsed.hasDate) {
           return {
             handled: true,
-            replyText: `⚠️ Formato de fecha inválido. Por favor usa */registrarse DD/MM [el/ella]* (ej: /registrarse 15/05 ella) o */registrarse el / ella* para configurar tu pronombre.`
+            replyText: `⚠️ Formato de fecha inválido o no reconocido. Podés usar:\n• */registrarse DD/MM el* (ej: /registrarse 15/05 el)\n• */registrarse DD/MM ella* (ej: /registrarse 15/05 ella)\n• */registrarse el*  o  */registrarse ella*`
           };
         }
 
-        // Si envió pronombre/género como segundo argumento (ej: /registrarse 15/05 ella)
-        let gender: 'male' | 'female' | null = null;
-        if (args[1]) {
-          const secondArg = args[1].toLowerCase();
-          if (secondArg === 'el' || secondArg === 'él') gender = 'male';
-          else if (secondArg === 'ella') gender = 'female';
-        }
-
-        this.birthdayService.registerBirthday(senderJid, dateParsed.day, dateParsed.month, gender);
-
-        if (gender) {
-          const genderText = gender === 'female' ? 'ella' : 'él';
-          return {
-            handled: true,
-            replyText: `✅ ¡De diez! Te registraste para el *${dateParsed.day}/${dateParsed.month}* y me referiré a vos como *${genderText}*. ¡Te festejaremos a pleno en tu día! 🎂🎉`
-          };
-        }
-
+        // Caso 3: Envió fecha (y opcionalmente pronombre en una sola línea)
         const existing = this.birthdayService.getBirthday(senderJid);
-        if (existing?.gender) {
-          const genderText = existing.gender === 'female' ? 'ella' : 'él';
+        const finalGender = parsed.gender || existing?.gender || null;
+        this.birthdayService.registerBirthday(senderJid, parsed.day!, parsed.month!, finalGender);
+
+        if (finalGender) {
+          const genderText = finalGender === 'female' ? 'ella' : 'él';
           return {
             handled: true,
-            replyText: `✅ ¡Listo! Te registraste para el *${dateParsed.day}/${dateParsed.month}* (te trataré como *${genderText}*). 🎂🎉`
+            replyText: `✅ ¡De diez! Te registraste para el *${parsed.day}/${parsed.month}* y te trataré como *${genderText}*. ¡Festejaremos a pleno en tu día! 🎂🎉`
           };
         }
 
         return {
           handled: true,
-          replyText: `🎂 ¡Anotado! Guardé tu cumpleaños para el *${dateParsed.day}/${dateParsed.month}* 🎉.\n\n¿Preferís que me refiera a vos como *él* o *ella*? Respondeme con */registrarse el* o */registrarse ella* así te trato de diez cuando charlemos o te saludemos! 😊`
+          replyText: `🎂 ¡Anotado! Guardé tu cumpleaños para el *${parsed.day}/${parsed.month}* 🎉.\n\n¿Preferís que me refiera a vos como *él* o *ella*? Respondeme con */registrarse el* o */registrarse ella* así te trato de diez cuando charlemos!`
         };
       }
 
@@ -335,13 +323,16 @@ export class CommandService {
           '• */resumen* → Genera un resumen inteligente del día con checkpoint.',
           '• */menciones [pág]* → Muestra tus menciones recientes en el grupo.',
           '• */marcar* → Muestra el contexto de conversación de tu última mención.',
-          '• */registrarse [DD/MM]* → Registra tu fecha de cumpleaños y pronombre.',
+          '• */registrarse DD/MM el / ella* → Registra tu fecha de cumpleaños y pronombre.',
           '• */h [signo]* → Tu horóscopo diario (por tu cumpleaños) o el de otro signo.',
           '• */h largo [signo]* → Predicción completa y extendida del horóscopo.',
           '• */top* → Ranking de los 10 participantes más activos del grupo.',
           '• */noticias [n]* → Envía 1 o más noticias tech (ej: /noticias o /noticias 2).',
+          '• */recordar <hora> <mensaje>* → Programa un aviso en el grupo (ej: /recordar 18:00 traer carbón).',
+          '• */recordatorios* → Ver los avisos pendientes activos.',
+          '• */cancelar_recordatorio <id>* → Cancelar un aviso programado.',
           '• */novedades* → Muestra las novedades, mejoras y arreglos de la última versión.',
-          '• */version* → Muestra la versión actual y estado del bot.',
+          '• */version* → Muestra la versión actual, estado y cambios recientes.',
           '• *test!noticias* / *test!comentario* → Comandos de prueba (solo admin).',
           '• */ayuda* → Muestra esta guía de comandos.',
           '---------------------------------------',
@@ -699,21 +690,160 @@ export class CommandService {
         };
       }
 
+      case 'recordar':
+      case 'recordatorio':
+      case 'aviso': {
+        if (!this.reminderService) {
+          return {
+            handled: true,
+            replyText: '⚠️ El servicio de recordatorios no está disponible en este momento.'
+          };
+        }
+
+        const inputArgs = args.join(' ').trim();
+        if (!inputArgs) {
+          return {
+            handled: true,
+            replyText: [
+              '💡 *Cómo usar el comando /recordar:*',
+              '',
+              '• `/recordar a las 18:00 que compren hielo`',
+              '• `/recordar en 30 minutos sacar las pizzas`',
+              '• `/recordar mañana a las 9am @cristian acordate del turno`',
+              '• `/recordar a todos hoy a las 21hs reunión`',
+              '',
+              'También podés pedírmelo directamente en lenguaje natural: _"Mequetrefe avisá a las 18hs que traigan hielo"_'
+            ].join('\n')
+          };
+        }
+
+        const parsed = this.reminderService.parseReminderRequest(
+          inputArgs,
+          senderJid,
+          senderName,
+          mentionedJids
+        );
+
+        if (!parsed.isReminder || parsed.error || !parsed.targetTimestamp || !parsed.timeLabel || !parsed.message) {
+          return {
+            handled: true,
+            replyText: parsed.error || '⚠️ No pude entender el recordatorio. Por favor indicá el momento (ej: "a las 18:00", "en 20m") y el mensaje.'
+          };
+        }
+
+        const isAdmin = this.checkAdminPermission(senderJid, senderName);
+        const result = this.reminderService.createReminder({
+          groupJid,
+          createdByJid: senderJid,
+          createdByName: senderName,
+          message: parsed.message,
+          targetTimestamp: parsed.targetTimestamp,
+          timeLabel: parsed.timeLabel,
+          targetJid: parsed.targetJid,
+          targetName: parsed.targetName,
+          isGroupBroadcast: parsed.isGroupBroadcast,
+          isAdmin
+        });
+
+        if (!result.success || !result.reminder) {
+          return {
+            handled: true,
+            replyText: `⚠️ ${result.error || 'No se pudo agendar el recordatorio.'}`
+          };
+        }
+
+        const confirmation = this.reminderService.formatConfirmationMessage(result.reminder, parsed.timeLabel);
+        return {
+          handled: true,
+          replyText: confirmation
+        };
+      }
+
+      case 'recordatorios':
+      case 'misrecordatorios': {
+        if (!this.reminderService) {
+          return {
+            handled: true,
+            replyText: '⚠️ El servicio de recordatorios no está disponible en este momento.'
+          };
+        }
+
+        const isAdmin = this.checkAdminPermission(senderJid, senderName);
+        const isDm = !groupJid.endsWith('@g.us');
+
+        if (isAdmin && (isDm || args[0]?.toLowerCase() === 'todos')) {
+          const reminders = this.reminderService.getAllActiveReminders();
+          return {
+            handled: true,
+            replyText: this.reminderService.formatActiveRemindersList(reminders, true)
+          };
+        }
+
+        const reminders = this.reminderService.getActiveRemindersByGroup(groupJid);
+        return {
+          handled: true,
+          replyText: this.reminderService.formatActiveRemindersList(reminders, false)
+        };
+      }
+
+      case 'cancelar_recordatorio':
+      case 'cancelarrecordatorio':
+      case 'borrarrecordatorio': {
+        if (!this.reminderService) {
+          return {
+            handled: true,
+            replyText: '⚠️ El servicio de recordatorios no está disponible en este momento.'
+          };
+        }
+
+        const id = args[0]?.trim();
+        if (!id) {
+          return {
+            handled: true,
+            replyText: '⚠️ Indicá el ID del recordatorio a cancelar (ej: `/cancelar_recordatorio rec_a1b2`). Podés consultar los IDs con `/recordatorios`.'
+          };
+        }
+
+        const isAdmin = this.checkAdminPermission(senderJid, senderName);
+        const res = this.reminderService.cancelReminder(id, senderJid, isAdmin);
+        return {
+          handled: true,
+          replyText: res.message
+        };
+      }
+
       case 'version':
       case 'v': {
-        const reply = [
-          '🤖 *MEQUETREFE BOT - ESTADO DEL SISTEMA*',
-          '---------------------------------------',
-          `📦 *Versión:* v${CURRENT_VERSION.version}`,
-          '🚀 *Entorno:* Windows Server VPS (PM2 24/7)',
-          '🔄 *Sincronización:* GitHub Actions Auto-Deploy Activo',
-          '🧠 *IA:* Meta AI + Groq Qwen Fallback (Contexto Aislado)',
-          '🛡️ *Guardrails:* Rate Limiting, Batería Social & DMs',
-          '✨ *Módulos:* Horóscopo, Noticias, Resúmenes, Apodos & Efemérides',
-          '---------------------------------------',
-          '💡 _Tirá `/novedades` para ver las mejoras de esta versión o `/ayuda`!_'
-        ].join('\n');
-        return { handled: true, replyText: reply };
+        const lines = [
+          `🤖 *MEQUETREFE BOT - VERSIÓN v${CURRENT_VERSION.version}*`,
+          `📅 *Fecha:* ${CURRENT_VERSION.date}`,
+          `🎯 *${CURRENT_VERSION.title}*`,
+          '---------------------------------------'
+        ];
+
+        if (CURRENT_VERSION.highlights && CURRENT_VERSION.highlights.length > 0) {
+          lines.push('✨ *Novedades y Mejoras:*');
+          for (const h of CURRENT_VERSION.highlights) {
+            lines.push(`• ${h}`);
+          }
+        }
+
+        if (CURRENT_VERSION.fixes && CURRENT_VERSION.fixes.length > 0) {
+          if (CURRENT_VERSION.highlights && CURRENT_VERSION.highlights.length > 0) {
+            lines.push('');
+          }
+          lines.push('🛠️ *Correcciones:*');
+          for (const f of CURRENT_VERSION.fixes) {
+            lines.push(`• ${f}`);
+          }
+        }
+
+        lines.push('---------------------------------------');
+        lines.push('🚀 *Entorno:* Windows Server VPS (PM2 24/7)');
+        lines.push('🔄 *Auto-Deploy:* GitHub Actions');
+        lines.push('💡 _Tirá `/ayuda` para ver todos los comandos disponibles._');
+
+        return { handled: true, replyText: lines.join('\n') };
       }
 
       default:

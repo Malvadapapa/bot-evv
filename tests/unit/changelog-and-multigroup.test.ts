@@ -27,12 +27,17 @@ import { CommandService } from '../../src/services/command.service.js';
 test('Changelog, Multi-Group Scheduler & Context Isolation Suite', async (t) => {
   await t.test('1. Changelog template contains version, highlights, and fixes properly formatted', () => {
     const message = buildUpdateBroadcastMessage(CURRENT_VERSION);
-    assert.match(message, /¡Mequetrefe se actualizó a la versión v1\.2\.0!/);
+    assert.match(message, new RegExp(`¡Mequetrefe se actualizó a la versión v${CURRENT_VERSION.version}!`));
     assert.match(message, /Novedades y Mejoras:/);
-    assert.match(message, /Aislamiento estricto de contexto entre grupos/);
+    assert.match(message, /Avisos y recordatorios/i);
     assert.match(message, /Correcciones y Ajustes:/);
-    assert.match(message, /Corregido el scheduler/);
+    assert.match(message, /Regla estricta de identidad/i);
     assert.match(message, /\/ayuda/);
+
+    // Test Same-Day continuation
+    const contMessage = buildUpdateBroadcastMessage(CURRENT_VERSION, true);
+    assert.match(contMessage, /¡Mequetrefe sumó más mejoras hoy!/);
+    assert.match(contMessage, /incorporar más cambios y ajustes hoy/);
   });
 
   await t.test('2. Meta AI prompt enforces strict group isolation without cross-chat memory', () => {
@@ -157,6 +162,6 @@ test('Changelog, Multi-Group Scheduler & Context Isolation Suite', async (t) => 
 
     const res = await cmdService.executeCommand('grupo@g.us', 'user@s.whatsapp.net', 'Juan', '/novedades');
     assert.equal(res.handled, true);
-    assert.match(res.replyText || '', /¡Mequetrefe se actualizó a la versión v1\.2\.0!/);
+    assert.match(res.replyText || '', new RegExp(`¡Mequetrefe se actualizó a la versión v${CURRENT_VERSION.version}!`));
   });
 });

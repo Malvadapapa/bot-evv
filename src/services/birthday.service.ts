@@ -34,6 +34,58 @@ export class BirthdayService {
     return { day, month };
   }
 
+  /**
+   * Parsea de forma tolerante la entrada de /registrarse, aceptando corchetes, paréntesis,
+   * y extrayendo tanto fecha como pronombre en cualquier orden.
+   * Ejemplos: "27/06 [el]", "[25/03]", "02/08 ella", "el 15/05", "15/05", "ella", "el"
+   */
+  public parseRegistrationInput(input: string): {
+    day?: number;
+    month?: number;
+    gender?: 'male' | 'female';
+    hasDate: boolean;
+    hasGender: boolean;
+    valid: boolean;
+  } {
+    const cleaned = input.replace(/[\[\]\(\)'"«»]/g, ' ').trim();
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+
+    let day: number | undefined;
+    let month: number | undefined;
+    let gender: 'male' | 'female' | undefined;
+
+    for (const token of tokens) {
+      const lower = token.toLowerCase();
+
+      if (['el', 'él', 'masculino', 'varon', 'varón', 'hombre'].includes(lower)) {
+        gender = 'male';
+        continue;
+      }
+      if (['ella', 'femenino', 'mujer'].includes(lower)) {
+        gender = 'female';
+        continue;
+      }
+
+      const dateParsed = this.parseBirthday(token);
+      if (dateParsed) {
+        day = dateParsed.day;
+        month = dateParsed.month;
+      }
+    }
+
+    const hasDate = day !== undefined && month !== undefined;
+    const hasGender = gender !== undefined;
+
+    return {
+      day,
+      month,
+      gender,
+      hasDate,
+      hasGender,
+      valid: hasDate || hasGender
+    };
+  }
+
   public registerBirthday(
     userJid: string,
     day: number,

@@ -92,13 +92,14 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
     assert.strictEqual(sentMessages.length, 1);
     const replyText = sentMessages[0].content.text;
     assert.match(replyText, /¡Hola! Todo bien por acá\./);
-    assert.match(replyText, /como es la primera vez que charlamos, me decís cuándo cumplís años/);
-    assert.match(replyText, /\/registrarse DD\/MM \[el\/ella\]/);
+    assert.match(replyText, /no te tengo en mi lista/i);
+    assert.match(replyText, /\/registrarse DD\/MM el/);
+    assert.doesNotMatch(replyText, /\[el\/ella\]/);
 
     db.close();
   });
 
-  await t.test('4. Proactive onboarding: Recurring user without profile gets Excel database joke', async () => {
+  await t.test('4. Proactive onboarding: Recurring user with incomplete profile gets update prompt without Excel joke or brackets', async () => {
     const db = Database.createInMemory();
     const messageRepo = new MessageRepository(db);
     const mentionRepo = new MentionRepository(db);
@@ -109,7 +110,7 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
     const recurringJid = 'recurrente@s.whatsapp.net';
     const groupJid = 'group@g.us';
 
-    // Insertar mensajes previos para simular usuario recurrente
+    // Insertar mensajes previos para simular usuario recurrente y perfil incompleto (sin género)
     messageRepo.save({
       id: 'prev-1',
       groupJid,
@@ -118,14 +119,7 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
       content: 'Buenas muchachos',
       timestamp: 500
     });
-    messageRepo.save({
-      id: 'prev-2',
-      groupJid,
-      senderJid: recurringJid,
-      senderName: 'ViejoAmigo',
-      content: 'Qué se cuenta hoy?',
-      timestamp: 600
-    });
+    birthdayRepo.save(recurringJid, 10, 5); // Cumpleaños guardado pero sin género
 
     const sentMessages: Array<{ jid: string; content: any }> = [];
     const mockSocket = {
@@ -178,9 +172,10 @@ test('Profile Onboarding & Subtle Flirt Unit Tests', async (t) => {
     assert.strictEqual(sentMessages.length, 1);
     const replyText = sentMessages[0].content.text;
     assert.match(replyText, /¡Hola viejo amigo!/);
-    assert.match(replyText, /Me actualizaron la base de datos en Excel/);
-    assert.match(replyText, /perro tecnológico/);
-    assert.match(replyText, /\/registrarse DD\/MM \[el\/ella\]/);
+    assert.match(replyText, /traspapelaron/i);
+    assert.doesNotMatch(replyText, /Excel/i);
+    assert.doesNotMatch(replyText, /\[el\/ella\]/);
+    assert.match(replyText, /\/registrarse DD\/MM el/);
 
     db.close();
   });
