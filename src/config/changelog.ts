@@ -8,12 +8,14 @@ export interface ReleaseNote {
   title: string;
   highlights: string[];
   fixes: string[];
+  broadcast?: boolean;
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
   version: '1.2.4',
   date: '24/09/2026',
   title: 'Fallback inteligente en Meta AI, sanitización de LIDs y mejoras en avisos grupales',
+  broadcast: true,
   highlights: [
     'Fallback automático e invisible a Groq/Qwen/Gemini ante caídas o sobrecargas de Meta AI ("Something went wrong")',
     'Avisos preventivos de cumpleaños (12:00) y saludos matutinos (08:00) con nombre real y mención interactiva en WhatsApp',

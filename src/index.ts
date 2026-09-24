@@ -268,8 +268,8 @@ async function startBot(): Promise<void> {
       // Difusión automática de novedades de versión tras conectarse (desactivada por defecto para permitir acumulación)
       setTimeout(async () => {
         try {
-          const autoBroadcast = guardrailsRepo.getConfig('auto_broadcast_on_start', 'false') === 'true';
-          if (!autoBroadcast) {
+          const shouldBroadcast = CURRENT_VERSION.broadcast === true || guardrailsRepo.getConfig('auto_broadcast_on_start', 'false') === 'true';
+          if (!shouldBroadcast) {
             console.log(`ℹ️ [Changelog] Difusión automática al inicio desactivada para permitir acumular mejoras. Usar /novedades broadcast para difundir cuando se decida.`);
             return;
           }
