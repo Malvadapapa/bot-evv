@@ -1,4 +1,5 @@
 import { BirthdayRepository } from '../database/repositories/birthday.repository.js';
+import { MessageRepository } from '../database/repositories/message.repository.js';
 import { JobExecutionRepository } from '../database/repositories/job-execution.repository.js';
 import { AIService } from './ai.service.js';
 import {
@@ -11,7 +12,8 @@ export class BirthdayService {
   constructor(
     private birthdayRepo: BirthdayRepository,
     private jobExecutionRepo: JobExecutionRepository,
-    private aiService: AIService
+    private aiService: AIService,
+    private messageRepo?: MessageRepository
   ) {}
 
   /**
@@ -86,17 +88,34 @@ export class BirthdayService {
     };
   }
 
+  /**
+   * Resuelve el nombre visible de un usuario a partir del registro o del historial de mensajes
+   */
+  public resolveUserName(userJid: string, storedName?: string | null): string | null {
+    if (storedName && storedName.trim()) {
+      return storedName.trim();
+    }
+    if (this.messageRepo) {
+      const found = this.messageRepo.getUserNameByJid(userJid);
+      if (found && found.trim()) {
+        return found.trim();
+      }
+    }
+    return null;
+  }
+
   public registerBirthday(
     userJid: string,
     day: number,
     month: number,
-    gender?: 'male' | 'female' | null
+    gender?: 'male' | 'female' | null,
+    userName?: string | null
   ): void {
-    this.birthdayRepo.save(userJid, day, month, gender);
+    this.birthdayRepo.save(userJid, day, month, gender, userName);
   }
 
-  public updateGender(userJid: string, gender: 'male' | 'female'): void {
-    this.birthdayRepo.updateGender(userJid, gender);
+  public updateGender(userJid: string, gender: 'male' | 'female', userName?: string | null): void {
+    this.birthdayRepo.updateGender(userJid, gender, userName);
   }
 
   public getBirthday(userJid: string) {
@@ -122,7 +141,10 @@ export class BirthdayService {
   /**
    * Genera el mensaje de felicitación para los cumpleañeros de hoy (idempotente)
    */
-  public async getTodayCelebrationMessage(groupJid: string, date?: Date): Promise<string | null> {
+  public async getTodayCelebrationMessage(
+    groupJid: string,
+    date?: Date
+  ): Promise<{ text: string; mentions: string[] } | null> {
     const today = getTodayCordoba(date);
     const jobKey = `birthday_today:${groupJid}:${today}`;
 
@@ -134,21 +156,32 @@ export class BirthdayService {
     if (celebrants.length === 0) return null;
 
     const messages: string[] = [];
+    const mentions: string[] = celebrants.map((c) => c.userJid);
+
     for (const person of celebrants) {
       const cleanNumber = person.userJid.split('@')[0];
-      const greeting = await this.aiService.generateBirthdayGreeting(cleanNumber, person.gender);
+      const isLid = person.userJid.includes('@lid');
+      const resolvedName = this.resolveUserName(person.userJid, person.userName);
+      const greetingTarget = resolvedName || (isLid ? 'fiera' : cleanNumber);
+      const greeting = await this.aiService.generateBirthdayGreeting(greetingTarget, person.gender);
       messages.push(greeting);
     }
 
     // Registrar ejecución para garantizar idempotencia
     this.jobExecutionRepo.recordJobExecution(jobKey, groupJid);
-    return messages.join('\n\n');
+    return {
+      text: messages.join('\n\n'),
+      mentions
+    };
   }
 
   /**
    * Genera el aviso de cumpleaños de mañana (idempotente)
    */
-  public getTomorrowAdvanceNotification(groupJid: string, date?: Date): string | null {
+  public getTomorrowAdvanceNotification(
+    groupJid: string,
+    date?: Date
+  ): { text: string; mentions: string[] } | null {
     const today = getTodayCordoba(date);
     const jobKey = `birthday_tomorrow_advance:${groupJid}:${today}`;
 
@@ -159,11 +192,30 @@ export class BirthdayService {
     const celebrants = this.getTomorrowBirthdays(date);
     if (celebrants.length === 0) return null;
 
-    const mentions = celebrants
-      .map((c) => `@${c.userJid.split('@')[0]}`)
-      .join(', ');
+    const mentions: string[] = celebrants.map((c) => c.userJid);
+    const labels: string[] = [];
+
+    for (const person of celebrants) {
+      const cleanNumber = person.userJid.split('@')[0];
+      const isLid = person.userJid.includes('@lid');
+      const resolvedName = this.resolveUserName(person.userJid, person.userName);
+
+      if (resolvedName) {
+        labels.push(`*${resolvedName}* (@${cleanNumber})`);
+      } else if (isLid) {
+        labels.push(`un/a integrante del grupo (@${cleanNumber})`);
+      } else {
+        labels.push(`@${cleanNumber}`);
+      }
+    }
+
+    const celebrantsText = labels.join(', ');
+    const verb = celebrants.length > 1 ? 'cumplen años' : 'cumple años';
 
     this.jobExecutionRepo.recordJobExecution(jobKey, groupJid);
-    return `🎂 *¡Aviso de cumpleaños!* Mañana cumple años ${mentions}. ¡Vayan preparando los saludos y festejos! 🎉🚀`;
+    return {
+      text: `🎂 *¡Aviso de cumpleaños!* Mañana ${verb} ${celebrantsText}. ¡Vayan preparando los saludos y festejos! 🎉🚀`,
+      mentions
+    };
   }
 }

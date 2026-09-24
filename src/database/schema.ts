@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS birthdays (
   day INTEGER NOT NULL,
   month INTEGER NOT NULL,
   gender TEXT,                         -- 'male' | 'female' | NULL
+  user_name TEXT,
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_birthdays_date ON birthdays(month, day);

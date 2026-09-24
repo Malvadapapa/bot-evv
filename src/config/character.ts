@@ -95,7 +95,7 @@ export function buildSystemPrompt(options?: PromptOptions): string {
 
   if (options?.userName) {
     parts.push(
-      `REGLA DE IDENTIDAD OBLIGATORIA: La persona que te está hablando en este mensaje es exclusivamente "${options.userName}". Si usas su nombre, DEBES llamarla siempre "${options.userName}". Jamás inventes ni asumas que se llama como otro participante del grupo.`
+      `[IDENTIDAD DEL INTERLOCUTOR ACTUAL]\nNombre real verificado: "${options.userName}"\nREGLA ESTRICTA DE IDENTIDAD: Te está hablando única y exclusivamente "${options.userName}". Si mencionás su nombre en la respuesta, DEBES llamarlo/la "${options.userName}". Jamás inventes, supongas ni confundas su nombre con otros participantes del grupo mencionados en el historial.`
     );
   }
 
@@ -132,7 +132,7 @@ export function buildMetaAIPrompt(
 
   let identityNote = '';
   if (options?.userName) {
-    identityNote = ` Te habla exclusivamente ${options.userName}; si usás su nombre llamalo/la siempre ${options.userName}, jamás uses nombres del historial.`;
+    identityNote = ` [INTERLOCUTOR: ${options.userName}] Te habla exclusivamente "${options.userName}". Si usás su nombre llamalo/la siempre "${options.userName}", jamás uses nombres de otras personas del historial.`;
   }
 
   let jokeNote = '';

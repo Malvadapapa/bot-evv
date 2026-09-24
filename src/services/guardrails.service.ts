@@ -467,7 +467,8 @@ export class GuardrailsService {
 
   public addAliases(phoneOrJid: string, aliases: string[], addedBy: string = 'admin'): string[] {
     const cleanPhone = phoneOrJid.split('@')[0].replace(/\D/g, '');
-    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const isLid = phoneOrJid.includes('@lid') || (cleanPhone.length >= 14 && !cleanPhone.startsWith('54'));
+    const jid = isLid ? `${cleanPhone}@lid` : `${cleanPhone}@s.whatsapp.net`;
     const added: string[] = [];
 
     for (const alias of aliases) {

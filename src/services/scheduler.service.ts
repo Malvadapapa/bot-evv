@@ -90,17 +90,7 @@ export class SchedulerService {
       for (const reminder of dueReminders) {
         try {
           const delivery = this.reminderService.formatDeliveryMessage(reminder);
-          let mentions = [...delivery.mentions];
-          if (reminder.targetJid === '@all' && this.adapter.getGroupParticipants) {
-            try {
-              const allParticipants = await this.adapter.getGroupParticipants(reminder.groupJid);
-              if (allParticipants && allParticipants.length > 0) {
-                mentions = Array.from(new Set([...mentions, ...allParticipants]));
-              }
-            } catch (pErr: any) {
-              console.warn(`⚠️ [Scheduler] No se pudieron obtener participantes para aviso @all en ${reminder.groupJid}:`, pErr?.message || pErr);
-            }
-          }
+          const mentions = [...delivery.mentions];
           console.log(`🔔 [Scheduler] Entregando recordatorio ${reminder.id} en ${reminder.groupJid} (menciones: ${mentions.length})...`);
           await this.adapter.sendMessage(reminder.groupJid, delivery.text, {
             mentions
@@ -174,7 +164,9 @@ export class SchedulerService {
           const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
           if (advanceNotice) {
             console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños para ${targetGroupJid}...`);
-            await this.adapter.sendMessage(targetGroupJid, advanceNotice);
+            await this.adapter.sendMessage(targetGroupJid, advanceNotice.text, {
+              mentions: advanceNotice.mentions
+            });
             if (targetGroups.length > 1) {
               await new Promise((resolve) => setTimeout(resolve, 1500));
             }
@@ -242,6 +234,7 @@ export class SchedulerService {
 
     // 3. Cumpleaños de hoy (si aplica)
     const birthdayCelebration = await this.birthdayService.getTodayCelebrationMessage(targetJid, now);
+    const mentions: string[] = [];
 
     // 4. Construcción del Mensaje 1 (Saludo Matutino)
     const greetingSections: string[] = [
@@ -253,7 +246,10 @@ export class SchedulerService {
 
     if (birthdayCelebration) {
       greetingSections.push('');
-      greetingSections.push(birthdayCelebration);
+      greetingSections.push(birthdayCelebration.text);
+      if (birthdayCelebration.mentions && birthdayCelebration.mentions.length > 0) {
+        mentions.push(...birthdayCelebration.mentions);
+      }
     }
 
     greetingSections.push('');
@@ -262,7 +258,9 @@ export class SchedulerService {
     );
 
     const mainGreetingMessage = greetingSections.join('\n');
-    await this.adapter.sendMessage(targetJid, mainGreetingMessage);
+    await this.adapter.sendMessage(targetJid, mainGreetingMessage, {
+      mentions: mentions.length > 0 ? mentions : undefined
+    });
 
     // 5. Obtener 3 noticias (prefetched o inéditas de las fuentes disponibles)
     const newsItems =

@@ -4,6 +4,22 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.4] - 2026-09-24
+### ✨ Novedades y Mejoras
+- **Fallback transparente ante fallos de Meta AI ("Something went wrong"):** Detección automática de errores internos o sobrecargas del bridge de Meta AI para activar de forma inmediata el LLM de respaldo (Groq / Qwen / Gemini), evitando que los usuarios en WhatsApp vean mensajes de error técnicos en inglés.
+- **Avisos de cumpleaños con nombre real y mención interactiva:** En el aviso preventivo de las 12:00 y en el saludo matutino de las 08:00, el bot resuelve el nombre del miembro y envía el array de menciones nativo (`mentions`) para que WhatsApp dibuje la etiqueta azul interactiva en lugar de números LID crudos.
+- **Recordatorios grupales con etiqueta limpia `@all`:** Al dispararse un aviso para todo el grupo, se utiliza la mención `@all` de forma limpia y directa sin volcar masivamente los contactos individuales.
+- **Plantillas dinámicas enriquecidas con picardía cordobesa:** Renovación completa de las frases de confirmación y entrega de recordatorios, agregando mayor espontaneidad y rotación de frases.
+- **Aislamiento estricto de interlocutores en prompts:** Reglas reforzadas en las directivas del modelo para asociar de manera inequívoca el mensaje al usuario actual sin deducir identidades erróneas a partir del historial.
+
+### 🔧 Correcciones
+- **Sanitización de LIDs en todo el proyecto:** Se eliminó la exposición de identificadores de 15 dígitos (`@242425150869604`) en cumpleaños, recordatorios, apodos e inactividad.
+- **Eliminación del auto-etiquetado del bot:** Se corrigió la plantilla de avisos para que, cuando el bot programa o entrega un recordatorio del sistema, no se mencione a sí mismo ni incluya su propio JID/LID en el texto.
+- **Persistencia de nombres en registro de cumpleaños:** El comando `/registrarse` ahora almacena y asocia el nombre de la persona en la base de datos junto con la fecha y pronombre.
+- **Preservación de LIDs en gestión de apodos:** Se corrigió `GuardrailsService` para no forzar erróneamente la extensión `@s.whatsapp.net` en usuarios registrados con `@lid`.
+
+---
+
 ## [v1.2.3] - 2026-09-23
 ### ✨ Novedades y Mejoras
 - **Avisos para todo el grupo (@all, @todos) con mención real a todos los miembros:** Al programar un recordatorio para todo el grupo, el scheduler obtiene los participantes del grupo y los incluye en las menciones de WhatsApp, notificando efectivamente a todos los integrantes.

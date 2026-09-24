@@ -89,11 +89,12 @@ export class MetaAIProvider implements AIProvider {
   }
 
   /**
-   * Detecta si la respuesta es un rechazo / censura estándar de Meta AI
+   * Detecta si la respuesta es un rechazo / censura estándar o un error interno de Meta AI
    */
   public isCannedRefusal(text: string): boolean {
     const lower = text.toLowerCase().trim();
     return (
+      // Rechazos y censura estándar
       lower.includes("sorry, i can't help you with this request") ||
       lower.includes("sorry, i cannot help with this request") ||
       lower.includes("i can't help with that request") ||
@@ -104,7 +105,18 @@ export class MetaAIProvider implements AIProvider {
       lower.includes("no puedo generar contenido que") ||
       lower.includes("as an ai developed by meta") ||
       lower.includes("como modelo de lenguaje de meta") ||
-      (lower.includes("sorry, i can't") && lower.includes("help you with"))
+      (lower.includes("sorry, i can't") && lower.includes("help you with")) ||
+      // Errores internos, fallos de servicio y timeouts de Meta AI
+      lower.includes("something went wrong") ||
+      lower.includes("please try again") ||
+      lower.includes("an error occurred") ||
+      lower.includes("try again later") ||
+      lower.includes("algo salió mal") ||
+      lower.includes("ocurrió un error") ||
+      lower.includes("intenta de nuevo") ||
+      lower.includes("intentá de nuevo") ||
+      lower.includes("service unavailable") ||
+      lower.includes("no se pudo procesar tu solicitud")
     );
   }
 

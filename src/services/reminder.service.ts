@@ -309,18 +309,17 @@ export class ReminderService {
     let targetStr = '';
 
     if (reminder.targetJid === '@all') {
-      targetStr = 'Para: el grupo completo\n';
+      targetStr = 'Para: el grupo completo (@all)\n';
     } else if (!isSelf) {
       let displayName = reminder.targetName;
       if (!displayName && reminder.targetJid) {
         displayName = this.messageRepo?.getUserNameByJid(reminder.targetJid) || null;
       }
-      if (!displayName && reminder.targetJid) {
-        displayName = reminder.targetJid.split('@')[0];
-      }
       if (displayName) {
         const clean = displayName.replace(/^@/, '');
         targetStr = `Para: @${clean}\n`;
+      } else if (reminder.targetJid && !reminder.targetJid.includes('@lid')) {
+        targetStr = `Para: @${reminder.targetJid.split('@')[0]}\n`;
       }
     }
 
@@ -328,15 +327,17 @@ export class ReminderService {
       `¡De una! Agendado para ${timeLabel}:`,
       `¡Listo! Quedó anotado para ${timeLabel}:`,
       `¡Anotado! Lo guardo para ${timeLabel}:`,
-      `¡Dale! Te lo agendé para ${timeLabel}:`
+      `¡Dale! Te lo agendé para ${timeLabel}:`,
+      `¡Impecable! Lo dejé registrado para ${timeLabel}:`
     ];
     const opener = openers[Math.floor(Math.random() * openers.length)];
 
     const closers = [
       'A esa hora te pego el grito 😉',
       'Tranqui que no se me pasa.',
-      'A esa hora aviso.',
-      'Dejámelo a mí, a esa hora aviso 😉'
+      'A esa hora aviso sin falta.',
+      'Dejámelo a mí, a esa hora aviso 😉',
+      'Despreocupate que te tengo cubierto 🚀'
     ];
     const closer = closers[Math.floor(Math.random() * closers.length)];
 
@@ -354,22 +355,51 @@ export class ReminderService {
    */
   public formatDeliveryMessage(reminder: ScheduledReminder): { text: string; mentions: string[] } {
     const mentions: string[] = [];
-    const senderPhone = reminder.createdByJid.split('@')[0];
+    const isCreatorBot = this.isBotJid(reminder.createdByJid);
+    const creatorIsLid = reminder.createdByJid.includes('@lid');
+    const creatorPhone = reminder.createdByJid.split('@')[0];
+    const resolvedCreatorName = reminder.createdByName || this.messageRepo?.getUserNameByJid(reminder.createdByJid);
 
-    // Caso 1: Para el grupo completo
+    let creatorLabel = '';
+    if (!isCreatorBot) {
+      if (creatorIsLid && resolvedCreatorName && resolvedCreatorName !== 'Usuario') {
+        creatorLabel = `*${resolvedCreatorName}* (@${creatorPhone})`;
+      } else if (!creatorIsLid) {
+        creatorLabel = `@${creatorPhone}`;
+      } else {
+        creatorLabel = 'alguien del grupo';
+      }
+    }
+
+    // Caso 1: Para el grupo completo (@all)
     if (reminder.targetJid === '@all') {
-      if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+      if (!isCreatorBot && reminder.createdByJid && reminder.createdByJid.includes('@')) {
         mentions.push(reminder.createdByJid);
       }
-      const openers = [
-        `Gente, @${senderPhone} dejó este aviso para el grupo:`,
-        `Atención grupo, acá va un recado que dejó @${senderPhone}:`,
-        `Gente, les paso el recordatorio de @${senderPhone}:`
-      ];
+
+      let openers: string[];
+      if (isCreatorBot) {
+        openers = [
+          '📢 *¡Atención @all!* Acá va un recordatorio para el grupo:',
+          '📢 *¡Aviso general @all!* Les paso este recordatorio:',
+          '📢 *¡Che @all!* Recuerden este aviso para el grupo:',
+          '📢 *¡Gente @all!* Pego el grito con este aviso que teníamos pendiente:'
+        ];
+      } else {
+        openers = [
+          `📢 *¡Atención @all!* ${creatorLabel} dejó este aviso para el grupo:`,
+          `📢 *¡Gente @all!* ${creatorLabel} me pidió que les recuerde:`,
+          `📢 *¡Che @all!* De parte de ${creatorLabel}, acá va este aviso:`,
+          `📢 *¡Oído al bife @all!* Les paso el recado que dejó ${creatorLabel}:`
+        ];
+      }
+
       const closers = [
-        '¡Están todos avisados!',
-        '¡Quedan todos avisados!',
-        '¡Avisados todos!'
+        '¡Están todos avisados che! 😉',
+        '¡Quedan todos avisados! No se hagan los desentendidos después 😂',
+        '¡Avisados todos! A ponerle onda 🚀',
+        '¡Listo el recado para la banda! ✨',
+        '¡Cosa avisada, cosa cumplida! 😉'
       ];
       const opener = openers[Math.floor(Math.random() * openers.length)];
       const closer = closers[Math.floor(Math.random() * closers.length)];
@@ -387,36 +417,54 @@ export class ReminderService {
     const isSelf = !reminder.targetJid || reminder.targetJid === reminder.createdByJid;
     if (!isSelf) {
       let targetTag = '';
+      const targetIsLid = reminder.targetJid ? reminder.targetJid.includes('@lid') : false;
+      const cleanTarget = reminder.targetJid ? reminder.targetJid.split('@')[0] : '';
+      const resolvedTargetName = reminder.targetName || (reminder.targetJid ? this.messageRepo?.getUserNameByJid(reminder.targetJid) : null);
+
       if (reminder.targetJid) {
         mentions.push(reminder.targetJid);
-        const cleanTarget = reminder.targetJid.split('@')[0];
-        targetTag = `@${cleanTarget}`;
-      } else if (reminder.targetName) {
-        targetTag = reminder.targetName.startsWith('@') ? reminder.targetName : `@${reminder.targetName}`;
       }
 
-      if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+      if (targetIsLid && resolvedTargetName) {
+        targetTag = `*${resolvedTargetName}* (@${cleanTarget})`;
+      } else if (cleanTarget) {
+        targetTag = `@${cleanTarget}`;
+      } else {
+        targetTag = 'che';
+      }
+
+      if (!isCreatorBot && reminder.createdByJid && reminder.createdByJid.includes('@')) {
         mentions.push(reminder.createdByJid);
       }
 
       const targetGender = reminder.targetJid ? this.birthdayRepo?.get(reminder.targetJid)?.gender : null;
 
-      const openers = [
-        `Che ${targetTag}, @${senderPhone} me pidió que te haga acordar:`,
-        `Buenas ${targetTag}, @${senderPhone} me dejó este recado para vos:`,
-        `${targetTag}, te paso el aviso que me dejó @${senderPhone}:`
-      ];
+      let openers: string[];
+      if (isCreatorBot) {
+        openers = [
+          `Che ${targetTag}, acá va el recordatorio pactado:`,
+          `Buenas ${targetTag}, te pego el grito con tu aviso:`,
+          `${targetTag}, acá tenés el recordatorio:`
+        ];
+      } else {
+        openers = [
+          `Che ${targetTag}, ${creatorLabel} me pidió que te haga acordar:`,
+          `Buenas ${targetTag}, ${creatorLabel} te dejó este recado:`,
+          `${targetTag}, te paso el aviso que me dejó ${creatorLabel}:`,
+          `¡Oído al bife ${targetTag}! ${creatorLabel} me encargó este recordatorio para vos:`
+        ];
+      }
       const opener = openers[Math.floor(Math.random() * openers.length)];
 
       let closer = '¡Listo el recado!';
       if (targetGender === 'female') {
-        const femaleClosers = ['¡Avisada estás! 😉', '¡Listo el recado reina!', '¡Ahí lo tenés!'];
+        const femaleClosers = ['¡Avisada estás! 😉', '¡Listo el recado reina!', '¡Ahí lo tenés! ✨', '¡Que no se te pase genia! 🌸'];
         closer = femaleClosers[Math.floor(Math.random() * femaleClosers.length)];
       } else if (targetGender === 'male') {
-        const maleClosers = ['¡Avisado estás fiera! 😉', '¡Cumplido el encargo campeón!', '¡Listo el recado!'];
+        const maleClosers = ['¡Avisado estás fiera! 😉', '¡Cumplido el encargo campeón!', '¡Listo el recado maestro!', '¡Que no se te pase crack! 🚀'];
         closer = maleClosers[Math.floor(Math.random() * maleClosers.length)];
       } else {
-        const neutralClosers = ['¡Avisado estás! 😉', '¡Cumplido el encargo!', '¡Listo el recado!'];
+        const neutralClosers = ['¡Avisado estás! 😉', '¡Cumplido el encargo!', '¡Listo el recado!', '¡Que no se te pase! ✨'];
         closer = neutralClosers[Math.floor(Math.random() * neutralClosers.length)];
       }
 
@@ -430,25 +478,27 @@ export class ReminderService {
     }
 
     // Caso 3: Auto-recordatorio personal
-    if (reminder.createdByJid && reminder.createdByJid.includes('@')) {
+    if (!isCreatorBot && reminder.createdByJid && reminder.createdByJid.includes('@')) {
       mentions.push(reminder.createdByJid);
     }
 
     const senderGender = this.birthdayRepo?.get(reminder.createdByJid)?.gender;
+    const personalTag = creatorIsLid && resolvedCreatorName ? `*${resolvedCreatorName}* (@${creatorPhone})` : `@${creatorPhone}`;
 
     const openers = [
-      `Che @${senderPhone}, acá tenés lo que me pediste que te recuerde:`,
-      `Buenas @${senderPhone}, te hago acordar lo que me pediste:`,
-      `@${senderPhone}, acá va tu recordatorio:`
+      `Che ${personalTag}, acá tenés lo que me pediste que te recuerde:`,
+      `Buenas ${personalTag}, te hago acordar lo que me dejaste anotado:`,
+      `${personalTag}, acá va tu recordatorio:`,
+      `¡Pego el grito como me pediste ${personalTag}! Acá tenés:`
     ];
     const opener = openers[Math.floor(Math.random() * openers.length)];
 
     let closer = '¡Cumplido el encargo!';
     if (senderGender === 'female') {
-      const femaleClosers = ['¡Cumplido el encargo reina!', '¡Ahí lo tenés! 😉', '¡Avisada estás!'];
+      const femaleClosers = ['¡Cumplido el encargo reina!', '¡Ahí lo tenés! 😉', '¡Avisada estás genia!', '¡Que no se te pase reina! 🌸'];
       closer = femaleClosers[Math.floor(Math.random() * femaleClosers.length)];
     } else if (senderGender === 'male') {
-      const maleClosers = ['¡Cumplido el encargo compinche!', '¡Ahí lo tenés fiera!', '¡Avisado estás campeón!'];
+      const maleClosers = ['¡Cumplido el encargo compinche!', '¡Ahí lo tenés fiera!', '¡Avisado estás campeón!', '¡Que no se te pase crack! 🚀'];
       closer = maleClosers[Math.floor(Math.random() * maleClosers.length)];
     } else {
       const neutralClosers = ['¡Cumplido el encargo!', '¡Ahí lo tenés!', '¡Avisado estás! 😉'];
@@ -490,9 +540,20 @@ export class ReminderService {
       });
 
       let forWhom = 'Personal';
-      if (r.targetJid === '@all') forWhom = 'Grupo';
-      else if (r.targetJid) forWhom = `@${r.targetJid.split('@')[0]}`;
-      else if (r.targetName) forWhom = `@${r.targetName}`;
+      if (r.targetJid === '@all') {
+        forWhom = 'Grupo (@todos)';
+      } else if (r.targetName) {
+        forWhom = r.targetName.startsWith('@') ? r.targetName : `@${r.targetName}`;
+      } else if (r.targetJid) {
+        const resolved = this.messageRepo?.getUserNameByJid(r.targetJid);
+        if (resolved) {
+          forWhom = `@${resolved}`;
+        } else if (!r.targetJid.includes('@lid')) {
+          forWhom = `@${r.targetJid.split('@')[0]}`;
+        } else {
+          forWhom = 'integrante';
+        }
+      }
 
       lines.push('');
       lines.push(`• ID: \`${r.id}\` | ${dateStr} ${timeStr} hs`);

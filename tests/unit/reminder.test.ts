@@ -135,7 +135,7 @@ test('Reminder and Registration Feature Tests', async (t) => {
 
     // Confirmación para tercero (debe mostrar el nombre de la persona, no JID crudo)
     const confirm = service.formatConfirmationMessage(reminder, 'mañana a las 9:00 hs');
-    assert.match(confirm, /Agendado para mañana a las 9:00 hs|anotado para mañana a las 9:00 hs|guardo para mañana a las 9:00 hs|agendé para mañana a las 9:00 hs/i);
+    assert.match(confirm, /Agendado para mañana a las 9:00 hs|anotado para mañana a las 9:00 hs|guardo para mañana a las 9:00 hs|agendé para mañana a las 9:00 hs|registrado para mañana a las 9:00 hs/i);
     assert.match(confirm, /Para: @Cristian/);
     assert.match(confirm, /lavate la cara/);
 
@@ -265,7 +265,7 @@ test('Reminder and Registration Feature Tests', async (t) => {
     db.close();
   });
 
-  await t.test('3c. checkDueReminders: Mentions all group participants on @all reminder', async () => {
+  await t.test('3c. checkDueReminders: Formats @all in message text without injecting mass participants into mentions', async () => {
     const db = Database.createInMemory();
     const repo = new ReminderRepository(db);
     const service = new ReminderService(repo);
@@ -313,9 +313,9 @@ test('Reminder and Registration Feature Tests', async (t) => {
 
     assert.strictEqual(sentOptions.length, 1);
     const mentions = sentOptions[0]?.mentions || [];
-    // Debe incluir a los participantes del grupo
-    assert.ok(mentions.includes('5493510002@s.whatsapp.net'));
-    assert.ok(mentions.includes('5493510003@s.whatsapp.net'));
+    // No debe incluir masivamente a todos los participantes para evitar caos
+    assert.strictEqual(mentions.includes('5493510002@s.whatsapp.net'), false);
+    assert.strictEqual(mentions.includes('5493510003@s.whatsapp.net'), false);
 
     db.close();
   });

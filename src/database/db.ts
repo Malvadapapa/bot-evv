@@ -31,6 +31,11 @@ export class Database {
     } catch {
       // La columna ya existe, ignorar error
     }
+    try {
+      this.sqlite.exec('ALTER TABLE birthdays ADD COLUMN user_name TEXT;');
+    } catch {
+      // La columna ya existe, ignorar error
+    }
   }
 
   public static getInstance(dbPath?: string): Database {

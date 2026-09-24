@@ -51,11 +51,25 @@ test('BirthdayService Unit Tests', async (t) => {
     // Primera ejecución genera mensaje
     const msg1 = await service.getTodayCelebrationMessage(groupJid);
     assert.ok(msg1);
-    assert.match(msg1, /¡Feliz cumple @cumpleanero!/);
+    assert.match(msg1.text, /¡Feliz cumple @cumpleanero!/);
+    assert.deepStrictEqual(msg1.mentions, ['cumpleanero@s.whatsapp.net']);
 
     // Segunda ejecución inmediata retorna null (idempotente)
     const msg2 = await service.getTodayCelebrationMessage(groupJid);
     assert.strictEqual(msg2, null);
+  });
+
+  await t.test('Tomorrow advance notification resolves LID to real name and returns mentions', async () => {
+    const groupJid = 'group-2@g.us';
+    const { getTomorrowCordobaDayAndMonth } = await import('../../src/utils/date.js');
+    const tomorrow = getTomorrowCordobaDayAndMonth();
+    service.registerBirthday('242425150869604@lid', tomorrow.day, tomorrow.month, 'female', 'Natalia');
+
+    const notice = service.getTomorrowAdvanceNotification(groupJid);
+    assert.ok(notice);
+    assert.match(notice.text, /Aviso de cumpleaños/);
+    assert.match(notice.text, /\*Natalia\* \(@242425150869604\)/);
+    assert.deepStrictEqual(notice.mentions, ['242425150869604@lid']);
   });
 
   db.close();

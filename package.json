@@ -1,6 +1,6 @@
 {
   "name": "bot-evv",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Bot de WhatsApp para grupos con integración a Meta AI y proveedores de LLM",
   "main": "dist/index.js",
   "type": "module",

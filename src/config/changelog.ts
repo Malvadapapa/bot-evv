@@ -11,22 +11,40 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.3',
-  date: '23/09/2026',
-  title: 'Avisos a todo el grupo con mención real (@all) y difusión de updates a demanda',
+  version: '1.2.4',
+  date: '24/09/2026',
+  title: 'Fallback inteligente en Meta AI, sanitización de LIDs y mejoras en avisos grupales',
   highlights: [
-    'Avisos y recordatorios para todo el grupo (@all, @todos) con notificación/mención real a todos los miembros',
-    'Limpieza inteligente de frases coloquiales y de pedido ("quiero que avises que...", "deciles que...")',
-    'Difusión de novedades y features bajo demanda (/novedades broadcast o a pedido) para no saturar con fixes'
+    'Fallback automático e invisible a Groq/Qwen/Gemini ante caídas o sobrecargas de Meta AI ("Something went wrong")',
+    'Avisos preventivos de cumpleaños (12:00) y saludos matutinos (08:00) con nombre real y mención interactiva en WhatsApp',
+    'Recordatorios para todo el grupo con etiqueta limpia @all y plantillas renovadas con autenticidad cordobesa',
+    'Eliminación total del auto-etiquetado del bot en avisos grupales y personales',
+    'Aislamiento estricto de interlocutor en prompts para evitar cruce de identidades entre miembros'
   ],
   fixes: [
-    'Corregido error por el cual @all y @todos no eran reconocidos al programar recordatorios grupales',
-    'Desactivada la difusión automática en cada reinicio para permitir acumular mejoras durante el desarrollo'
+    'Corregida fuga de LIDs numéricos (@242425150869604) en avisos de cumpleaños, inactividad y recordatorios',
+    'Corregido el reenvío de mensajes de error de backend de Meta AI a los grupos de WhatsApp',
+    'Corregida omisión de menciones interactivas (mentions array) en avisos del Scheduler',
+    'Corregida la forzada conversión a @s.whatsapp.net de apodos registrados con LID'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.3',
+    date: '23/09/2026',
+    title: 'Avisos a todo el grupo con mención real (@all) y difusión de updates a demanda',
+    highlights: [
+      'Avisos y recordatorios para todo el grupo (@all, @todos) con notificación/mención real a todos los miembros',
+      'Limpieza inteligente de frases coloquiales y de pedido ("quiero que avises que...", "deciles que...")',
+      'Difusión de novedades y features bajo demanda (/novedades broadcast o a pedido) para no saturar con fixes'
+    ],
+    fixes: [
+      'Corregido error por el cual @all y @todos no eran reconocidos al programar recordatorios grupales',
+      'Desactivada la difusión automática en cada reinicio para permitir acumular mejoras durante el desarrollo'
+    ]
+  },
   {
     version: '1.2.2',
     date: '23/09/2026',

@@ -71,8 +71,13 @@ export class EventHandler {
     const senderJid = getSenderJid(msg);
     const pushName = msg.pushName || 'Usuario';
 
-    // Evitar bucle si el sender coincide con el JID del bot
-    if (this.config.botCleanJid && senderJid === this.config.botCleanJid) {
+    // Evitar bucle si el sender coincide con el JID o LID del bot
+    const isBotSender =
+      (this.config.botCleanJid && senderJid === this.config.botCleanJid) ||
+      (this.config.botLid && senderJid === this.config.botLid) ||
+      (this.config.reminderService && this.config.reminderService.isBotJid(senderJid)) ||
+      senderJid.includes('143839226503193');
+    if (isBotSender) {
       return;
     }
 

@@ -258,7 +258,9 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
     let prompt = `El grupo de WhatsApp lleva varias horas en silencio total. Genera un mensaje compinche, ocurrente y divertido para reactivar la conversación como la mascota del grupo. Máximo 2 oraciones breves y con emojis.`;
 
     if (targetMention) {
-      prompt += ` Menciona puntualmente a @${targetMention.phone} (¡usa exactamente "@${targetMention.phone}" para que WhatsApp active el tag!) preguntándole en qué anda o tirándole una chicana sana.`;
+      const isLid = targetMention.phone.length >= 14 && !targetMention.phone.startsWith('54');
+      const tagText = isLid ? targetMention.name : `@${targetMention.phone}`;
+      prompt += ` Menciona puntualmente a ${tagText} preguntándole en qué anda o tirándole una chicana sana.`;
     }
 
     if (freshContext && freshContext.trim().length > 0) {
@@ -280,7 +282,9 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
 
     // Fallbacks dinámicos seguros
     if (targetMention) {
-      return `🤖 ¡El grupo está sospechosamente quieto! @${targetMention.phone} tirá un centro che, ¿en qué andás hoy? 👀☕`;
+      const isLid = targetMention.phone.length >= 14 && !targetMention.phone.startsWith('54');
+      const tagText = isLid ? `*${targetMention.name}*` : `@${targetMention.phone}`;
+      return `🤖 ¡El grupo está sospechosamente quieto! ${tagText} tirá un centro che, ¿en qué andás hoy? 👀☕`;
     }
     const fallbackNudges = [
       '🤖 Che, este grupo está más silencioso que biblioteca de noche... ¿Todos sobrevivieron al día o qué onda? 😂☕',
@@ -295,7 +299,9 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
    * Genera un mensaje humorístico de "Búsqueda de Paradero" para miembros inactivos (+7 días)
    */
   public async generateGhostMemberCallout(userPhone: string, userName: string, daysInactive: number): Promise<string> {
-    const prompt = `Un miembro del grupo de WhatsApp (${userName}) lleva ${daysInactive} días sin escribir un solo mensaje. Genera un aviso divertido y con mucha buena onda de "Búsqueda de Paradero / Alerta Fantasma" etiquetando a @${userPhone} (debes incluir exactamente "@${userPhone}" en el texto). Pregúntale si está vivo, si lo secuestraron los extraterrestres o si cambió de vida, y pídele que mande una señal de vida aunque sea un sticker. Máximo 2 oraciones, tono compinche argentino con emojis.`;
+    const isLid = userPhone.length >= 14 && !userPhone.startsWith('54');
+    const displayTag = isLid && userName ? `*${userName}*` : `@${userPhone}`;
+    const prompt = `Un miembro del grupo de WhatsApp (${userName}) lleva ${daysInactive} días sin escribir un solo mensaje. Genera un aviso divertido y con mucha buena onda de "Búsqueda de Paradero / Alerta Fantasma" nombrando o etiquetando a ${displayTag}. Pregúntale si está vivo, si lo secuestraron los extraterrestres o si cambió de vida, y pídele que mande una señal de vida aunque sea un sticker. Máximo 2 oraciones, tono compinche argentino con emojis.`;
 
     try {
       if (this.externalProvider && this.externalProvider.isConfigured) {
@@ -306,7 +312,7 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
       }
     } catch (e) {}
 
-    return `👻 *REPORTE DE PERSONAS PERDIDAS* 🔍\nChe @${userPhone}, ¡hace más de una semana que no te leemos por acá! ¿Todo bien o te tragó la tierra? 🛸 ¡Mandá una señal de vida aunque sea un sticker che! 😂`;
+    return `👻 *REPORTE DE PERSONAS PERDIDAS* 🔍\nChe ${displayTag}, ¡hace más de una semana que no te leemos por acá! ¿Todo bien o te tragó la tierra? 🛸 ¡Mandá una señal de vida aunque sea un sticker che! 😂`;
   }
 
   /**

@@ -28,6 +28,18 @@ test('Conversation Climate, Anti-Refusal Fallback and Bot Self-Memory Tests', as
       provider.isCannedRefusal("As an AI developed by Meta, I cannot generate content that..."),
       true
     );
+    assert.strictEqual(
+      provider.isCannedRefusal("Something went wrong. Please try again"),
+      true
+    );
+    assert.strictEqual(
+      provider.isCannedRefusal("An error occurred. Please try again later."),
+      true
+    );
+    assert.strictEqual(
+      provider.isCannedRefusal("Algo salió mal. Por favor intentá de nuevo."),
+      true
+    );
 
     // Casos legítimos de conversación
     assert.strictEqual(

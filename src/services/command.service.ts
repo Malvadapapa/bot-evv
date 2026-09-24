@@ -214,7 +214,7 @@ export class CommandService {
         if (!parsed.hasDate && parsed.hasGender && parsed.gender) {
           const genderText = parsed.gender === 'female' ? 'ella' : 'él';
           const vocativo = parsed.gender === 'female' ? 'genia' : 'crack';
-          this.birthdayService.updateGender(senderJid, parsed.gender);
+          this.birthdayService.updateGender(senderJid, parsed.gender, senderName);
           return {
             handled: true,
             replyText: `✅ ¡Anotado ${vocativo}! De ahora en adelante me referiré a vos como *${genderText}*. ¡Gracias por avisarme! 😊✨`
@@ -232,7 +232,7 @@ export class CommandService {
         // Caso 3: Envió fecha (y opcionalmente pronombre en una sola línea)
         const existing = this.birthdayService.getBirthday(senderJid);
         const finalGender = parsed.gender || existing?.gender || null;
-        this.birthdayService.registerBirthday(senderJid, parsed.day!, parsed.month!, finalGender);
+        this.birthdayService.registerBirthday(senderJid, parsed.day!, parsed.month!, finalGender, senderName);
 
         if (finalGender) {
           const genderText = finalGender === 'female' ? 'ella' : 'él';
