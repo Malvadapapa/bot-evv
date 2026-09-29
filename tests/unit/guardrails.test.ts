@@ -395,4 +395,33 @@ test('Guardrails & Bot Behavior Rules Suite', async (suite) => {
     assert.ok(removeResult.replyText?.includes('revocado como administrador'));
     assert.strictEqual(env.guardrailsService.isAdmin(`${newAdminPhone}@s.whatsapp.net`), false);
   });
+
+  await suite.test('Regla 13: Mensajes con prefijo "!" (comandos de otros bots) deben ignorarse completamente', async () => {
+    const env = setupTestEnv();
+    env.guardrailsService.markIntroSent(env.authorizedGroupJid);
+
+    // 1. Mensaje con !play en el grupo autorizado
+    await env.eventHandler.handleMessage({
+      key: { remoteJid: env.authorizedGroupJid, fromMe: false, id: 'msg-other-bot-1' },
+      pushName: 'UserX',
+      message: { conversation: '!play Despacito' }
+    });
+
+    // 2. Mensaje con !help en el grupo autorizado
+    await env.eventHandler.handleMessage({
+      key: { remoteJid: env.authorizedGroupJid, fromMe: false, id: 'msg-other-bot-2' },
+      pushName: 'UserY',
+      message: { conversation: '!help' }
+    });
+
+    // 3. Mensaje con @bot !menu
+    await env.eventHandler.handleMessage({
+      key: { remoteJid: env.authorizedGroupJid, fromMe: false, id: 'msg-other-bot-3' },
+      pushName: 'UserZ',
+      message: { conversation: '@5493515554241 !menu' }
+    });
+
+    assert.strictEqual(env.sentMessages.length, 0, 'No debe responder a comandos con prefijo !');
+    assert.strictEqual(env.messageRepo.getMessagesSince(env.authorizedGroupJid, 0).length, 0, 'No debe persistir comandos de otros bots');
+  });
 });

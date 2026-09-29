@@ -40,10 +40,14 @@ export class CommandService {
 
   public isCommand(text: string): boolean {
     const trimmed = text.trim();
+    if (trimmed.startsWith('!')) return false;
+    const cleanText = trimmed.replace(/^@\S+\s+/i, '').trim();
+    if (cleanText.startsWith('!')) return false;
+
     return (
-      trimmed.startsWith('/') ||
-      trimmed.startsWith('!') ||
-      /^(?:@\S+\s+)?(?:\/|!|test!\w+\b|test\w+\b)/i.test(trimmed)
+      cleanText.startsWith('/') ||
+      /^test!\w+\b/i.test(cleanText) ||
+      /^test\w+\b/i.test(cleanText)
     );
   }
 
@@ -55,9 +59,12 @@ export class CommandService {
     mentionedJids: string[] = []
   ): Promise<CommandExecutionResult> {
     const cleanText = text.replace(/^@\S+\s+/i, '').trim();
+    if (cleanText.startsWith('!')) {
+      return { handled: false };
+    }
+
     const isExplicitCmd =
       cleanText.startsWith('/') ||
-      cleanText.startsWith('!') ||
       /^test!\w+\b/i.test(cleanText) ||
       /^test\w+\b/i.test(cleanText);
 
@@ -66,7 +73,7 @@ export class CommandService {
     }
 
     let stripped = cleanText;
-    if (stripped.startsWith('/') || stripped.startsWith('!')) {
+    if (stripped.startsWith('/')) {
       stripped = stripped.slice(1).trim();
     }
 

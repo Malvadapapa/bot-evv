@@ -12,24 +12,39 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.5',
+  version: '1.2.6',
   date: '29/09/2026',
-  title: 'Personalidad amable y compinche, optimización de intervenciones y scheduler resiliente',
-  broadcast: false,
+  title: 'Compatibilidad multi-bot y difusión de mejoras acumuladas',
+  broadcast: true,
   highlights: [
-    'Personalidad amigable y compinche: Se eliminó todo tono agresivo, insultos o bardeos, priorizando humor blanco y buena onda como mascota sabandija',
-    'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas y enfriamientos más largos para no saturar los grupos',
-    'Español argentino natural: Tono cercano y ocurrente sin forzar modismos ni modas artificiales',
-    'Batería social más empática: Respuestas simpáticas y amigables ante consultas intensivas sin ser cortante'
+    'Compatibilidad con otros bots: Mequetrefe ignora por completo los mensajes y comandos con prefijo "!" (ej: !play, !menu, !help) dirigidos a otros bots',
+    'Comandos exclusivos con barra (/): Todos los comandos de Mequetrefe se activan únicamente con "/" (ej: /ayuda, /resumen, /recordar, /top, /micumple)',
+    'Personalidad compinche y amigable: Mascota ocurrente y simpática (sabandija mequetrefe) con humor blanco y cero hostilidad o bardeos',
+    'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas para interactuar sin saturar los chats'
   ],
   fixes: [
-    'Scheduler multi-grupo resiliente: Aislamiento try/catch por grupo para evitar que un grupo inaccesible o con error 403 bloquee a los demás',
-    'Ventana de tolerancia matutina: Saludos y resúmenes matutinos garantizados con idempotencia SQLite entre 08:00 y 11:59 ante retrasos del timer'
+    'Eliminadas respuestas erróneas a otros bots: Mequetrefe ya no responde "Comando no reconocido" ante comandos con prefijo "!"',
+    'Scheduler multi-grupo resiliente: Saludos matutinos y noticias entregados con aislamiento de errores entre grupos'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.5',
+    date: '29/09/2026',
+    title: 'Personalidad amable y compinche, optimización de intervenciones y scheduler resiliente',
+    highlights: [
+      'Personalidad amigable y compinche: Se eliminó todo tono agresivo, insultos o bardeos, priorizando humor blanco y buena onda como mascota sabandija',
+      'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas y enfriamientos más largos para no saturar los grupos',
+      'Español argentino natural: Tono cercano y ocurrente sin forzar modismos ni modas artificiales',
+      'Batería social más empática: Respuestas simpáticas y amigables ante consultas intensivas sin ser cortante'
+    ],
+    fixes: [
+      'Scheduler multi-grupo resiliente: Aislamiento try/catch por grupo para evitar que un grupo inaccesible o con error 403 bloquee a los demás',
+      'Ventana de tolerancia matutina: Saludos y resúmenes matutinos garantizados con idempotencia SQLite entre 08:00 y 11:59 ante retrasos del timer'
+    ]
+  },
   {
     version: '1.2.4',
     date: '24/09/2026',

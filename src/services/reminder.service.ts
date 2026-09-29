@@ -45,10 +45,16 @@ export class ReminderService {
     mentionedJids: string[] = [],
     isExplicitCommand: boolean = false
   ): ParseReminderResult {
+    // Mensajes dirigidos a otros bots con prefijo '!' deben ignorarse completamente
+    const cleanLeading = rawText.replace(/^@\S+\s+/i, '').trim();
+    if (rawText.trim().startsWith('!') || cleanLeading.startsWith('!')) {
+      return { isReminder: false };
+    }
+
     let text = rawText.trim();
 
-    // Quitar prefijo de comando si existe (/recordar, /recordatorio, !recordar, etc.)
-    text = text.replace(/^[!\/]recordar(?:io)?\b/i, '').trim();
+    // Quitar prefijo de comando si existe (/recordar, /recordatorio)
+    text = text.replace(/^\/recordar(?:io)?\b/i, '').trim();
 
     // Limpiar mención al bot al inicio si vino en el texto (@Mequetrefe ...), pero sin quitar @all ni @todos
     text = text.replace(/^@(?!all\b|todos\b)\S+\s+/i, '').trim();
@@ -67,7 +73,7 @@ export class ReminderService {
       /^(?:che\s+)?(?:mequetrefe\s+)?(?:bot\s+)?(?:por\s+fa(?:vor)?\s+)?(?:(?:me\s+)?(?:pod[eé]s|podr[ií]as|quer[eé]s|te\s+pido\s+que(?:\s+me)?)\s+)?(?:recordar(?:me|le|nos)?|record[aá](?:me|le|nos)?|recuerd[aá](?:me)?|avisar(?:me|le|nos)?|avis[aá](?:me|le|nos)?|hac[eé](?:me|nos)?\s+acordar|tir[aá](?:le|me)?\s+un\s+aviso)(?:\s+|$|:)/i
     );
 
-    const isCommand = isExplicitCommand || rawText.trim().startsWith('/') || rawText.trim().startsWith('!');
+    const isCommand = isExplicitCommand || rawText.trim().startsWith('/');
     if (!triggerMatch && !isCommand) {
       return { isReminder: false };
     }

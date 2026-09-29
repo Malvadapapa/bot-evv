@@ -81,6 +81,12 @@ export class EventHandler {
       return;
     }
 
+    // 2b. Regla Multi-bot: Ignorar completamente comandos y mensajes que comiencen con '!' (otros bots del grupo)
+    const cleanLeadingText = text.replace(/^@\S+\s+/i, '').trim();
+    if (text.startsWith('!') || cleanLeadingText.startsWith('!')) {
+      return;
+    }
+
     // 3. Regla: Gatekeeper de Grupos y Privados (DMs)
     if (!isGroup) {
       // Mensajes privados: Solo administradores autorizados y exclusivamente para comandos
@@ -105,7 +111,7 @@ export class EventHandler {
       if (!isAuthorized) {
         // Excepción: Si quien escribe es admin y está ejecutando /aprobar en este grupo, permitirlo
         const isAdmin = this.config.commandService.checkAdminPermission(senderJid, pushName);
-        const isApproving = text.startsWith('/aprobar') || text.startsWith('!aprobar');
+        const isApproving = text.startsWith('/aprobar');
         if (isAdmin && isApproving) {
           // Continuar hacia el CommandService para autorizarlo directamente
         } else {
@@ -156,7 +162,7 @@ export class EventHandler {
     const botLidNum = botLid ? botLid.split('@')[0] : '';
 
     // Verificar si el grupo autorizado necesita presentación inicial (Onboarding primer ingreso)
-    const isApproving = text.startsWith('/aprobar') || text.startsWith('!aprobar');
+    const isApproving = text.startsWith('/aprobar');
     if (isGroup && !isApproving && this.config.guardrailsService && !this.config.guardrailsService.isIntroSent(remoteJid)) {
       this.config.guardrailsService.markIntroSent(remoteJid);
       const introMsg = 'Hola a todos 👋 Soy Mequetrefe, el bot asistente de este grupo. Estoy acá para dar una mano con recordatorios, menciones, resúmenes y tirar un poco de onda. Para ver qué puedo hacer, tiren /ayuda. ¡Un gusto sumarme!';

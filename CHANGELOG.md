@@ -4,6 +4,19 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.6] - 2026-09-29
+### ✨ Novedades y Mejoras
+- **Compatibilidad con otros bots (prefijo `!`):** Mequetrefe ahora ignora por completo los mensajes y comandos que comiencen con el símbolo `!` (como `!play`, `!menu`, `!help`, `!skip`, etc.), permitiendo la convivencia limpia con otros bots de música o moderación en el grupo sin interrumpir ni intentar responder.
+- **Comandos exclusivos con barra `/`:** Todos los comandos de Mequetrefe quedan unificados y blindados para responder únicamente cuando comienzan con la barra inclinada `/` (ej: `/ayuda`, `/resumen`, `/recordar`, `/top`, `/marcar`, `/micumple`).
+- **Personalidad compinche y ocurrente ("Sabandija Mequetrefe"):** Mascota amistosa, cariñosa y pícara con humor blanco en español argentino natural, con eliminación absoluta de insultos, agresiones o respuestas pesadas.
+- **Espontaneidad optimizada:** Reducción del 40% en intervenciones no solicitadas para no saturar las charlas del grupo.
+
+### 🔧 Correcciones
+- **Eliminación de falsos positivos ante comandos de otros bots:** Se eliminó la respuesta errónea `❓ Comando no reconocido` cuando los miembros del grupo enviaban comandos dirigidos al otro bot.
+- **Scheduler multi-grupo tolerante a fallos:** Saludos e informes matutinos aislados por grupo para evitar que errores 403 en un grupo impidan el envío en los demás.
+
+---
+
 ## [v1.2.5] - 2026-09-29
 ### ✨ Novedades y Mejoras
 - **Personalidad amable, compinche y ocurrente ("Sabandija Mequetrefe"):** Se erradicó cualquier rasgo de hostilidad, agresividad, bardeos pesados o insultos. El bot se redefine como una mascota de grupo ocurrente, cariñosa y pícara que suma buena onda y humor blanco a las conversaciones.

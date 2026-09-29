@@ -39,7 +39,7 @@ test('CommandService Unit Tests', async (t) => {
   const userJid = 'user1@s.whatsapp.net';
   const userName = 'Alice';
 
-  await t.test('isCommand correctly detects slash commands and test! commands', () => {
+  await t.test('isCommand correctly detects slash commands and ignores other bots exclamation mark commands', () => {
     assert.strictEqual(commandService.isCommand('/resumen'), true);
     assert.strictEqual(commandService.isCommand('  /ayuda  '), true);
     assert.strictEqual(commandService.isCommand('@123456 /registrarse 12/05'), true);
@@ -47,9 +47,19 @@ test('CommandService Unit Tests', async (t) => {
     assert.strictEqual(commandService.isCommand('test!noticias'), true);
     assert.strictEqual(commandService.isCommand('test!comentario Cristian lo dejó la novia'), true);
     assert.strictEqual(commandService.isCommand('/test!noticias'), true);
-    assert.strictEqual(commandService.isCommand('!test!noticias'), true);
+    assert.strictEqual(commandService.isCommand('!test!noticias'), false);
+    assert.strictEqual(commandService.isCommand('!play despacito'), false);
+    assert.strictEqual(commandService.isCommand('!ayuda'), false);
+    assert.strictEqual(commandService.isCommand('@123456 !play'), false);
     assert.strictEqual(commandService.isCommand('Hola que tal'), false);
     assert.strictEqual(commandService.isCommand('@Bot mequetrefe'), false);
+  });
+
+  await t.test('executeCommand ignores commands with ! prefix (for other bots)', async () => {
+    const resPlay = await commandService.executeCommand(groupJid, userJid, userName, '!play despacito');
+    assert.strictEqual(resPlay.handled, false);
+    const resAyuda = await commandService.executeCommand(groupJid, userJid, userName, '!ayuda');
+    assert.strictEqual(resAyuda.handled, false);
   });
 
   await t.test('Executes /ayuda and returns list of commands', async () => {
