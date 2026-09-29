@@ -127,10 +127,10 @@ export class AIService {
     isFemale: boolean = false
   ): Promise<string> {
     const instruction = isFemale
-      ? `Haz un comentario breve, simpático y pícaro halagando a ${targetName} con admiración cordobesa (por ejemplo: que si hablan de la reina del grupo avisen que te peinás, que llegó la jefa del grupo o que andan todos pendientes de ella). Tono compinche, dulce y divertido con emojis (🐶, ✨, 👑). Máximo 2 oraciones breves. Incluye la mención "@${targetName}".`
-      : `Haz una broma breve, cálida y divertida sobre ${targetName} (por ejemplo: que seguro está durmiendo como un tronco, que anda desaparecido, que le dio fiaquita o que se hace el importante). Tono natural y relajado con emojis (🐶, 😂, 😴). No satures de modismos ni uses "culiau". Máximo 2 oraciones breves. Incluye la mención "@${targetName}" en el chiste.`;
+      ? `Haz un comentario breve, simpático y pícaro halagando a ${targetName} con admiración sincera (por ejemplo: que si hablan de la reina del grupo avisen que te peinás, que llegó la jefa del grupo o que andan todos pendientes de ella). Tono compinche, dulce y divertido con emojis (🐶, ✨, 👑). Cero descalificaciones. Máximo 2 oraciones breves. Incluye la mención "@${targetName}".`
+      : `Haz una broma breve, amable, cálida y divertida sobre ${targetName} con picardía inocente de sabandija mequetrefe (por ejemplo: que seguro está durmiendo como un tronco, que anda desaparecido, que le dio fiaquita o que se hace el importante). Tono cómplice, amigable y relajado con emojis (🐶, 😂, 😴). PROHIBIDO insultar o agredir. Máximo 2 oraciones breves. Incluye la mención "@${targetName}" en el chiste.`;
 
-    const prompt = `Eres Mequetrefe, la mascota cordobesa oficial del grupo de WhatsApp.
+    const prompt = `Eres Mequetrefe, la mascota oficial y sabandija compinche del grupo de WhatsApp.
 En el grupo acaban de nombrar o hablar sobre ${targetName}.
 Contexto reciente de lo que dijeron:
 "${recentContext}"
@@ -319,12 +319,12 @@ Usa formato de WhatsApp (*negrita* con un solo asterisco). No inventes datos que
    * Genera una intervención espontánea ingeniosa y compinche sobre la conversación activa
    */
   public async generateSpontaneousChimeIn(recentConversation: string): Promise<string> {
-    const prompt = `Estás escuchando la conversación en un grupo de amigos de WhatsApp donde eres la mascota compinche (Mequetrefe / Vector).
+    const prompt = `Estás escuchando la conversación en un grupo de amigos de WhatsApp donde eres la mascota compinche (Mequetrefe).
 Los humanos están charlando de esto:
 """
 ${recentConversation}
 """
-Entrométete de forma espontánea, breve y divertida (máximo 1 o 2 oraciones). Puedes acotar un remate gracioso, dar una opinión inesperada o tirar una chicana de buena onda sobre lo que están hablando. Habla como un argentino real en WhatsApp, sin ser pesado.`;
+Entrométete como un sabandija mequetrefe simpático y pícaro: de forma espontánea, breve y divertida (máximo 1 o 2 oraciones). Puedes acotar un remate gracioso, dar una opinión inesperada o festejar una ocurrencia con buena onda. Habla como un argentino real en WhatsApp, siempre amable y sin ser pesado ni agresivo.`;
 
     try {
       if (this.externalProvider && this.externalProvider.isConfigured) {

@@ -34,10 +34,10 @@ const envSchema = z.object({
   GHOST_ALERT_COOLDOWN_HOURS: z.coerce.number().default(2),
   NEWS_COUNT: z.coerce.number().default(3),
 
-  // Spontaneous Interventions settings
-  SPONTANEOUS_CHANCE: z.coerce.number().default(0.35),
-  SPONTANEOUS_COOLDOWN_MINUTES: z.coerce.number().default(25),
-  SPONTANEOUS_MESSAGE_INTERVAL: z.coerce.number().default(18),
+  // Spontaneous Interventions settings (reducido ~40% para menor invasividad)
+  SPONTANEOUS_CHANCE: z.coerce.number().default(0.15),
+  SPONTANEOUS_COOLDOWN_MINUTES: z.coerce.number().default(50),
+  SPONTANEOUS_MESSAGE_INTERVAL: z.coerce.number().default(30),
 
   // Timing & Cooldowns (in milliseconds)
   COOLDOWN_USER_MS: z.coerce.number().default(8000),

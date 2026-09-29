@@ -235,7 +235,7 @@ export class GuardrailsService {
         count: currentCount,
         level: 'very_brief',
         personalityDirective:
-          'BATERÍA SOCIAL MUY BAJA (13-14): Estás exhausto de tanto hablar con esta misma persona. Responde de forma muy escueta, cortante y con sueño (máximo 5 a 10 palabras).'
+          'BATERÍA SOCIAL MUY BAJA (13-14): Estás exhausto de tanto hablar con esta misma persona pero mantén la simpatía. Responde de forma muy breve, amigable y con sueño (máximo 5 a 10 palabras), ej: "me duermo parado amigo, dame un ratito 🔋😴".'
       };
     }
 
@@ -246,7 +246,7 @@ export class GuardrailsService {
         count: currentCount,
         level: 'low_patience',
         personalityDirective:
-          'BATERÍA SOCIAL BAJA (10-12): Mostrá menor paciencia con humor cordobés (ej: "che loco, me estás exprimiendo", "¿no tenés nada que hacer hoy? 😂", "aflojá un poco"). Breve y directo.'
+          'BATERÍA SOCIAL BAJA (10-12): Mostrá cansancio con humor sano y picardía (ej: "che me vas a fundir las neuronas hoy 😂", "pará un toque crack 🔋"). Breve, simpático y directo, sin agresividad.'
       };
     }
 
@@ -257,7 +257,7 @@ export class GuardrailsService {
         count: currentCount,
         level: 'tired_humor',
         personalityDirective:
-          'BATERÍA SOCIAL MEDIA (6-9): Tirale al paso un comentario gracioso sobre que te tiene charlando sin parar o que te va a tener que pagar el sueldo.'
+          'BATERÍA SOCIAL MEDIA (6-9): Tirale al paso un comentario simpático de sabandija sobre que te tiene charlando sin parar o que te va a tener que invitar una merienda.'
       };
     }
 

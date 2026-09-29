@@ -177,11 +177,11 @@ export class InactivityService {
     let targetMention: { phone: string; name: string } | undefined;
     let targetUserJid: string | undefined;
 
-    // Si hay JIDs prioritarios configurados (ej: Cristian), priorizarlos con cierta probabilidad
+    // Si hay JIDs prioritarios configurados (ej: Cristian), priorizarlos con menor frecuencia (~35%)
     const targetJids = this.config.interactionTargetJids || [];
     const lastSelectedJid = this.lastNudgeUsers.get(groupJid);
 
-    if (targetJids.length > 0 && Math.random() < 0.6) {
+    if (targetJids.length > 0 && Math.random() < 0.35) {
       const candidateJid = targetJids.find((j) => j !== lastSelectedJid) || targetJids[0];
       const stats = this.statsRepo.getTopActiveUsers(groupJid, 50).find((u) => u.userJid === candidateJid);
       targetUserJid = candidateJid;

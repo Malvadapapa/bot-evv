@@ -273,7 +273,7 @@ export class EventHandler {
           if (matchedAlias && matchedAlias.userJid !== senderJid) {
             // Verificar cooldown de 3 horas para halagarla espontáneamente
             if (this.config.guardrailsService.canFlirtSpontaneously(matchedAlias.userJid)) {
-              if (Math.random() < 0.45) {
+              if (Math.random() < 0.27) {
                 await this.handleAliasChimeIn(msg, remoteJid, text, matchedAlias, sock);
                 return;
               }
@@ -289,7 +289,7 @@ export class EventHandler {
         }
 
         // Opción B: Acotación espontánea por acumulación de mensajes conversacionales
-        const interval = this.config.spontaneousMessageInterval ?? 18;
+        const interval = this.config.spontaneousMessageInterval ?? 30;
         if (currentCount >= interval && this.shouldTriggerSpontaneous(remoteJid)) {
           this.groupMessageCounters.set(remoteJid, 0);
           await this.handleConversationalChimeIn(msg, remoteJid, sock);
@@ -451,14 +451,14 @@ export class EventHandler {
       // Detectar si el usuario está respondiendo a una broma que hizo el bot
       const isReplyingToBotJoke = Boolean(quoted?.stanzaId && this.botJokeMsgIds.has(quoted.stanzaId));
 
-      // Piropos cordobeses para mujeres: probabilidad base 60% si no fue halagada en las últimas 3 horas
+      // Piropos cordobeses/amables para mujeres: probabilidad base reducida al 35% si no fue halagada en las últimas 3 horas
       let isFlirting = false;
       if (userGender === 'female') {
         const canFlirt = this.config.guardrailsService
           ? this.config.guardrailsService.canFlirtSpontaneously(senderJid)
           : true;
 
-        if (canFlirt && Math.random() < 0.60) {
+        if (canFlirt && Math.random() < 0.35) {
           isFlirting = true;
           this.config.guardrailsService?.recordSpontaneousFlirt(senderJid);
         }
@@ -545,11 +545,11 @@ export class EventHandler {
 
   private shouldTriggerSpontaneous(groupJid: string): boolean {
     const now = Date.now();
-    const cooldown = this.config.spontaneousCooldownMs ?? 30 * 60 * 1000;
+    const cooldown = this.config.spontaneousCooldownMs ?? 50 * 60 * 1000;
     const lastTime = this.spontaneousCooldowns.get(groupJid) || 0;
     if (now - lastTime < cooldown) return false;
 
-    const chance = this.config.spontaneousChance ?? 0.25;
+    const chance = this.config.spontaneousChance ?? 0.15;
     return Math.random() < chance;
   }
 

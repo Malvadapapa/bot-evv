@@ -12,27 +12,42 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.4',
-  date: '24/09/2026',
-  title: 'Fallback inteligente en Meta AI, sanitización de LIDs y mejoras en avisos grupales',
+  version: '1.2.5',
+  date: '29/09/2026',
+  title: 'Personalidad amable y compinche, optimización de intervenciones y scheduler resiliente',
   broadcast: false,
   highlights: [
-    'Fallback automático e invisible a Groq/Qwen/Gemini ante caídas o sobrecargas de Meta AI ("Something went wrong")',
-    'Avisos preventivos de cumpleaños (12:00) y saludos matutinos (08:00) con nombre real y mención interactiva en WhatsApp',
-    'Recordatorios para todo el grupo con etiqueta limpia @all y plantillas renovadas con autenticidad cordobesa',
-    'Eliminación total del auto-etiquetado del bot en avisos grupales y personales',
-    'Aislamiento estricto de interlocutor en prompts para evitar cruce de identidades entre miembros'
+    'Personalidad amigable y compinche: Se eliminó todo tono agresivo, insultos o bardeos, priorizando humor blanco y buena onda como mascota sabandija',
+    'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas y enfriamientos más largos para no saturar los grupos',
+    'Español argentino natural: Tono cercano y ocurrente sin forzar modismos ni modas artificiales',
+    'Batería social más empática: Respuestas simpáticas y amigables ante consultas intensivas sin ser cortante'
   ],
   fixes: [
-    'Corregida fuga de LIDs numéricos (@242425150869604) en avisos de cumpleaños, inactividad y recordatorios',
-    'Corregido el reenvío de mensajes de error de backend de Meta AI a los grupos de WhatsApp',
-    'Corregida omisión de menciones interactivas (mentions array) en avisos del Scheduler',
-    'Corregida la forzada conversión a @s.whatsapp.net de apodos registrados con LID'
+    'Scheduler multi-grupo resiliente: Aislamiento try/catch por grupo para evitar que un grupo inaccesible o con error 403 bloquee a los demás',
+    'Ventana de tolerancia matutina: Saludos y resúmenes matutinos garantizados con idempotencia SQLite entre 08:00 y 11:59 ante retrasos del timer'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.4',
+    date: '24/09/2026',
+    title: 'Fallback inteligente en Meta AI, sanitización de LIDs y mejoras en avisos grupales',
+    highlights: [
+      'Fallback automático e invisible a Groq/Qwen/Gemini ante caídas o sobrecargas de Meta AI ("Something went wrong")',
+      'Avisos preventivos de cumpleaños (12:00) y saludos matutinos (08:00) con nombre real y mención interactiva en WhatsApp',
+      'Recordatorios para todo el grupo con etiqueta limpia @all y plantillas renovadas con autenticidad cordobesa',
+      'Eliminación total del auto-etiquetado del bot en avisos grupales y personales',
+      'Aislamiento estricto de interlocutor en prompts para evitar cruce de identidades entre miembros'
+    ],
+    fixes: [
+      'Corregida fuga de LIDs numéricos (@242425150869604) en avisos de cumpleaños, inactividad y recordatorios',
+      'Corregido el reenvío de mensajes de error de backend de Meta AI a los grupos de WhatsApp',
+      'Corregida omisión de menciones interactivas (mentions array) en avisos del Scheduler',
+      'Corregida la forzada conversión a @s.whatsapp.net de apodos registrados con LID'
+    ]
+  },
   {
     version: '1.2.3',
     date: '23/09/2026',

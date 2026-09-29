@@ -4,6 +4,19 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.5] - 2026-09-29
+### ✨ Novedades y Mejoras
+- **Personalidad amable, compinche y ocurrente ("Sabandija Mequetrefe"):** Se erradicó cualquier rasgo de hostilidad, agresividad, bardeos pesados o insultos. El bot se redefine como una mascota de grupo ocurrente, cariñosa y pícara que suma buena onda y humor blanco a las conversaciones.
+- **Espontaneidad optimizada y reducción del 40% en intervenciones:** Reducción drástica de intervenciones no solicitadas (probabilidad reducida al 15%, enfriamiento extendido a 50 minutos y acumulación de 30 mensajes) para garantizar que el bot participe sin ser invasivo.
+- **Español argentino natural:** Expresión coloquial fluida sin forzar lunfardo ni cordobés artificial; utiliza modismos locales de manera espontánea y simpática.
+- **Batería social más empática:** Se suavizaron las respuestas por fatiga o uso excesivo de consultas, respondiendo con gracia y calidez en lugar de ser cortante.
+
+### 🔧 Correcciones
+- **Scheduler multi-grupo resiliente con aislamiento de fallos:** Se envolvió el despacho de cada grupo autorizado en bloques `try/catch` aislados. Si un grupo genera un error `forbidden` (403, expulsión del bot o restricciones de admin), el error se captura y registra, permitiendo que los siguientes grupos reciban su saludo y noticias normalmente.
+- **Ventana de tolerancia matutina (08:00 - 11:59):** Se sustituyó la comprobación estricta de minuto exacto (`08:00`) por una ventana tolerante con registro de ejecución idempotente en SQLite (`daily_morning_message:{group}:{date}`), asegurando la entrega incluso si el temporizador del proceso se desfasa unos segundos o si el bot se reinicia durante la mañana.
+
+---
+
 ## [v1.2.4] - 2026-09-24
 ### ✨ Novedades y Mejoras
 - **Fallback transparente ante fallos de Meta AI ("Something went wrong"):** Detección automática de errores internos o sobrecargas del bridge de Meta AI para activar de forma inmediata el LLM de respaldo (Groq / Qwen / Gemini), evitando que los usuarios en WhatsApp vean mensajes de error técnicos en inglés.

@@ -140,19 +140,32 @@ export class SchedulerService {
         }
       }
 
-      // 2. Mensaje Diario Matutino (08:00) para todos los grupos autorizados
-      if (timeStr === '08:00') {
+      // 2. Mensaje Diario Matutino (Ventana 08:00 a 11:59) con tolerancia e idempotencia por grupo
+      const hour = parseInt(timeStr.split(':')[0], 10);
+      const isMorningWindow = hour >= 8 && hour < 12;
+
+      if (isMorningWindow) {
         let morningNews: import('./news.service.js').TechNewsItem[] | undefined;
         for (const targetGroupJid of targetGroups) {
           const jobKey = `daily_morning_message:${targetGroupJid}:${today}`;
           if (!this.jobExecutionRepo.isJobExecuted(jobKey)) {
-            console.log(`☀️ [Scheduler] Generando mensaje matutino para ${targetGroupJid} (${today})...`);
-            if (!morningNews) {
-              morningNews = await this.newsService.getLatestUnpublishedNews(3);
-            }
-            await this.sendMorningBriefing(targetGroupJid, false, jobKey, now, morningNews);
-            if (targetGroups.length > 1) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+            try {
+              console.log(`☀️ [Scheduler] Generando mensaje matutino para ${targetGroupJid} (${today})...`);
+              if (!morningNews) {
+                morningNews = await this.newsService.getLatestUnpublishedNews(3);
+              }
+              await this.sendMorningBriefing(targetGroupJid, false, jobKey, now, morningNews);
+              if (targetGroups.length > 1) {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
+            } catch (groupErr: any) {
+              const errMsg = groupErr?.message || String(groupErr);
+              console.error(`❌ [Scheduler] Error enviando mensaje matutino a ${targetGroupJid}:`, errMsg);
+              // Si el grupo es forbidden (código 403), registrar el job para no bloquear ni reintentar infinitamente hoy
+              if (errMsg.includes('forbidden') || errMsg.includes('403')) {
+                console.warn(`⚠️ [Scheduler] Grupo ${targetGroupJid} no permite mensajes (forbidden). Omitiendo por hoy.`);
+                this.jobExecutionRepo.recordJobExecution(jobKey, targetGroupJid);
+              }
             }
           }
         }
@@ -161,15 +174,19 @@ export class SchedulerService {
       // 3. Aviso Preventivo de Cumpleaños de Mañana (12:00)
       if (timeStr === '12:00') {
         for (const targetGroupJid of targetGroups) {
-          const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
-          if (advanceNotice) {
-            console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños para ${targetGroupJid}...`);
-            await this.adapter.sendMessage(targetGroupJid, advanceNotice.text, {
-              mentions: advanceNotice.mentions
-            });
-            if (targetGroups.length > 1) {
-              await new Promise((resolve) => setTimeout(resolve, 1500));
+          try {
+            const advanceNotice = this.birthdayService.getTomorrowAdvanceNotification(targetGroupJid, now);
+            if (advanceNotice) {
+              console.log(`🎂 [Scheduler] Enviando aviso preventivo de cumpleaños para ${targetGroupJid}...`);
+              await this.adapter.sendMessage(targetGroupJid, advanceNotice.text, {
+                mentions: advanceNotice.mentions
+              });
+              if (targetGroups.length > 1) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+              }
             }
+          } catch (bdayErr: any) {
+            console.error(`❌ [Scheduler] Error enviando aviso de cumpleaños a ${targetGroupJid}:`, bdayErr?.message || bdayErr);
           }
         }
       }
@@ -179,19 +196,23 @@ export class SchedulerService {
       if (minute === 0 || minute === 30) {
         const botJid = this.adapter.getBotCleanJid();
         for (const targetGroupJid of targetGroups) {
-          const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid, now);
-          if (inactivityResult) {
-            const logType =
-              inactivityResult.type === 'ghost_alert'
-                ? `👻 [Scheduler] Alerta de miembro ausente en ${targetGroupJid}...`
-                : `🤖 [Scheduler] Reactivando grupo ${targetGroupJid}...`;
-            console.log(logType);
-            await this.adapter.sendMessage(targetGroupJid, inactivityResult.text, {
-              mentions: inactivityResult.mentionedJid ? [inactivityResult.mentionedJid] : []
-            });
-            if (targetGroups.length > 1) {
-              await new Promise((resolve) => setTimeout(resolve, 1500));
+          try {
+            const inactivityResult = await this.inactivityService.evaluateInactivityNudge(targetGroupJid, botJid, now);
+            if (inactivityResult) {
+              const logType =
+                inactivityResult.type === 'ghost_alert'
+                  ? `👻 [Scheduler] Alerta de miembro ausente en ${targetGroupJid}...`
+                  : `🤖 [Scheduler] Reactivando grupo ${targetGroupJid}...`;
+              console.log(logType);
+              await this.adapter.sendMessage(targetGroupJid, inactivityResult.text, {
+                mentions: inactivityResult.mentionedJid ? [inactivityResult.mentionedJid] : []
+              });
+              if (targetGroups.length > 1) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+              }
             }
+          } catch (inacErr: any) {
+            console.error(`❌ [Scheduler] Error en evaluación de inactividad para ${targetGroupJid}:`, inacErr?.message || inacErr);
           }
         }
       }
@@ -263,17 +284,21 @@ export class SchedulerService {
     });
 
     // 5. Obtener 3 noticias (prefetched o inéditas de las fuentes disponibles)
-    const newsItems =
-      prefetchedNews && prefetchedNews.length > 0
-        ? prefetchedNews
-        : await this.newsService.getLatestUnpublishedNews(3);
+    try {
+      const newsItems =
+        prefetchedNews && prefetchedNews.length > 0
+          ? prefetchedNews
+          : await this.newsService.getLatestUnpublishedNews(3);
 
-    // Despacho secuencial en mensajes separados con un pequeño intervalo
-    const messageDelayMs = isTest ? 300 : 1200;
-    for (const item of newsItems) {
-      await new Promise((resolve) => setTimeout(resolve, messageDelayMs));
-      const singleNewsMessage = this.newsService.formatSingleNewsItem(item);
-      await this.adapter.sendMessage(targetJid, singleNewsMessage);
+      // Despacho secuencial en mensajes separados con un pequeño intervalo
+      const messageDelayMs = isTest ? 300 : 1200;
+      for (const item of newsItems) {
+        await new Promise((resolve) => setTimeout(resolve, messageDelayMs));
+        const singleNewsMessage = this.newsService.formatSingleNewsItem(item);
+        await this.adapter.sendMessage(targetJid, singleNewsMessage);
+      }
+    } catch (newsErr: any) {
+      console.warn(`⚠️ [Scheduler] Error enviando noticias a ${targetJid}:`, newsErr?.message || newsErr);
     }
 
     // Registrar idempotencia si es la ejecución programada de las 08:00
