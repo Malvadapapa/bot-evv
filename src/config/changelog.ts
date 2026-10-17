@@ -12,24 +12,38 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.7',
+  version: '1.2.8',
   date: '17/10/2026',
-  title: 'Autenticación oficial de horóscopo con Sigastra y respaldo web anti-caídas',
+  title: 'Auto-purga de grupos eliminados, sincronización al inicio y gestión de autorización',
   broadcast: false,
   highlights: [
-    'Autenticación oficial Sigastra API: Integración de Partner Key verificada permanentemente con canal oficial de Telegram',
-    'Mecanismo de contingencia anti-caídas: Fallback automático a extracción web pública para garantizar que el horóscopo diario funcione sin interrupciones',
-    'Soporte de configuración: Nueva variable de entorno SIGASTRA_API_KEY para gestión declarativa de credenciales astrológicas'
+    'Auto-desautorización en tiempo real: Si el bot es eliminado de un grupo de WhatsApp, se desautoriza y elimina automáticamente de la base de datos',
+    'Reconciliación automática al iniciar: Al conectarse, sincroniza los grupos autorizados en SQLite con los grupos reales de WhatsApp mediante sock.groupFetchAllParticipating(), purgando grupos huérfanos',
+    'Auto-purga proactiva en Scheduler: Detección de errores "forbidden" (403) durante el envío de avisos matutinos o recordatorios, desautorizando de inmediato grupos inaccesibles',
+    'Comandos de administración para grupos: Nuevos subcomandos /admin grupos (lista grupos autorizados e IDs) y /admin desautorizar <JID> para control manual'
   ],
   fixes: [
-    'Solución al error 401 Unauthorized en /horoscopo y /h provocado por la nueva política de seguridad de Sigastra',
-    'Corrección de aislamiento en tests unitarios de horóscopo para ejecución offline 100% confiable',
-    'Alineación de marca temporal de inactividad de miembros con timestamp relativo en estadísticas'
+    'Eliminación de errores 403 Forbidden repetitivos en los logs de PM2 al intentar enviar mensajes a grupos donde el bot ya no estaba presente',
+    'Prevención de fugas de base de datos manteniendo el registro limpio únicamente con grupos activos'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
-  CURRENT_VERSION,
+  {
+    version: '1.2.7',
+    date: '17/10/2026',
+    title: 'Autenticación oficial de horóscopo con Sigastra y respaldo web anti-caídas',
+    highlights: [
+      'Autenticación oficial Sigastra API: Integración de Partner Key verificada permanentemente con canal oficial de Telegram',
+      'Mecanismo de contingencia anti-caídas: Fallback automático a extracción web pública para garantizar que el horóscopo diario funcione sin interrupciones',
+      'Soporte de configuración: Nueva variable de entorno SIGASTRA_API_KEY para gestión declarativa de credenciales astrológicas'
+    ],
+    fixes: [
+      'Solución al error 401 Unauthorized en /horoscopo y /h provocado por la nueva política de seguridad de Sigastra',
+      'Corrección de aislamiento en tests unitarios de horóscopo para ejecución offline 100% confiable',
+      'Alineación de marca temporal de inactividad de miembros con timestamp relativo en estadísticas'
+    ]
+  },
   {
     version: '1.2.6',
     date: '29/09/2026',

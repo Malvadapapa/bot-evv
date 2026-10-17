@@ -4,6 +4,20 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.8] - 2026-10-17
+### ✨ Novedades y Mejoras
+- **Auto-desautorización en tiempo real:** Cuando el bot es removido o expulsado de un grupo de WhatsApp (`group-participants.update` con acción `remove`), el grupo es eliminado inmediatamente de la base de datos de grupos autorizados (`authorized_groups`), evitando cualquier intento posterior de interactuar con dicho grupo.
+- **Sincronización y depuración al inicio:** Durante la conexión del bot (`connection.update === 'open'`), se consultan los grupos donde el bot participa activamente (`groupFetchAllParticipating()`) y se desautorizan automáticamente aquellos grupos registrados en SQLite donde el bot ya no sea miembro.
+- **Auto-purga proactiva en Scheduler:** Si el planificador de tareas encuentra un error `forbidden` (403) al intentar enviar mensajes matutinos, avisos de cumpleaños, noticias o recordatorios, el grupo se desautoriza en el acto para evitar reintentos fallidos en ejecuciones futuras.
+- **Comandos de administración para gestión de grupos:**
+  - `/admin grupos`: Lista todos los grupos actualmente autorizados en el bot junto a su JID correspondiente.
+  - `/admin desautorizar <JID>`: Permite al administrador revocar y eliminar manualmente la autorización de un grupo.
+
+### 🔧 Correcciones
+- **Eliminación definitiva de errores 403 Forbidden en PM2:** Solucionada la cascada de errores de advertencia en el log de errores (`bot-evv-error.log`) provocada por grupos residuales o eliminados.
+
+---
+
 ## [v1.2.7] - 2026-10-17
 ### ✨ Novedades y Mejoras
 - **Autenticación oficial Sigastra API:** Integración de Partner Key oficial (`SIGASTRA_API_KEY`) verificada permanentemente a través del canal oficial de Telegram `@singastraevv`, permitiendo acceso continuo a las predicciones astrológicas del endpoint v1.

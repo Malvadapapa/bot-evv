@@ -297,6 +297,10 @@ export class GuardrailsService {
     this.guardrailsRepo.authorizeGroup(groupJid, groupName, authorizedBy, introSent);
   }
 
+  public deauthorizeGroup(groupJid: string): void {
+    this.guardrailsRepo.deauthorizeGroup(groupJid);
+  }
+
   public createGroupJoinRequest(
     groupJid: string,
     groupName: string,

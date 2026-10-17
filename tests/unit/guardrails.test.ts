@@ -424,4 +424,34 @@ test('Guardrails & Bot Behavior Rules Suite', async (suite) => {
     assert.strictEqual(env.sentMessages.length, 0, 'No debe responder a comandos con prefijo !');
     assert.strictEqual(env.messageRepo.getMessagesSince(env.authorizedGroupJid, 0).length, 0, 'No debe persistir comandos de otros bots');
   });
+
+  await suite.test('Regla 14: Gestión de grupos y desautorización (/admin grupos y /admin desautorizar)', async () => {
+    const env = setupTestEnv();
+    const tempGroupJid = '120363999999999999@g.us';
+
+    // 1. Autorizar grupo temporal
+    env.guardrailsService.authorizeGroup(tempGroupJid, 'Grupo Temporal', 'test-admin');
+    assert.strictEqual(env.guardrailsService.isGroupAuthorized(tempGroupJid), true);
+
+    // 2. Listar grupos con /admin grupos
+    const listRes = await env.commandService.executeCommand(
+      env.adminJid,
+      env.adminJid,
+      'Cristian',
+      '/admin grupos'
+    );
+    assert.ok(listRes.replyText?.includes('Grupo Temporal'));
+    assert.ok(listRes.replyText?.includes(tempGroupJid));
+
+    // 3. Desautorizar grupo con /admin desautorizar
+    const deauthRes = await env.commandService.executeCommand(
+      env.adminJid,
+      env.adminJid,
+      'Cristian',
+      `/admin desautorizar ${tempGroupJid}`
+    );
+    assert.ok(deauthRes.replyText?.includes('desautorizado y eliminado'));
+    assert.strictEqual(env.guardrailsService.isGroupAuthorized(tempGroupJid), false);
+  });
 });
+

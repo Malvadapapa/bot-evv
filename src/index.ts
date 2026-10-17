@@ -145,8 +145,12 @@ const schedulerAdapter: SchedulerTargetAdapter = {
   getBotCleanJid: () => {
     const rawId = currentSocket?.user?.id;
     return rawId ? rawId.split(':')[0] + '@s.whatsapp.net' : '';
+  },
+  deauthorizeGroup: (groupJid: string) => {
+    guardrailsService.deauthorizeGroup(groupJid);
   }
 };
+
 
 const scheduler = new SchedulerService(
   summaryService,
@@ -265,6 +269,29 @@ async function startBot(): Promise<void> {
       // Iniciar scheduler de tareas programadas
       scheduler.start();
 
+      // Reconciliación y limpieza automática de grupos huérfanos al conectar
+      setTimeout(async () => {
+        try {
+          const participatingGroups = await sock.groupFetchAllParticipating();
+          const participatingJids = new Set(Object.keys(participatingGroups || {}));
+          const authorized = guardrailsService.getAllAuthorizedGroups();
+          let cleanedCount = 0;
+
+          for (const grp of authorized) {
+            if (!participatingJids.has(grp.groupJid)) {
+              console.warn(`🧹 [Cleanup] Bot ya no forma parte del grupo "${grp.groupName}" (${grp.groupJid}). Eliminado de la base de datos.`);
+              guardrailsService.deauthorizeGroup(grp.groupJid);
+              cleanedCount++;
+            }
+          }
+          if (cleanedCount > 0) {
+            console.log(`✅ [Cleanup] Limpieza de inicio completada: ${cleanedCount} grupo(s) huérfano(s) eliminado(s).`);
+          }
+        } catch (syncErr: any) {
+          console.warn(`⚠️ [Cleanup] Error verificando grupos participantes:`, syncErr?.message || syncErr);
+        }
+      }, 4000);
+
       // Difusión automática de novedades de versión tras conectarse (desactivada por defecto para permitir acumulación)
       setTimeout(async () => {
         try {
@@ -293,19 +320,33 @@ async function startBot(): Promise<void> {
     }
   });
 
-  // Listener de incorporación a grupos con flujo de autorización (Guardrails)
+  // Listener de incorporación y remoción de grupos (Guardrails)
   sock.ev.on('group-participants.update', async (update) => {
-    if (update.action !== 'add') return;
-
     const botFullId = sock.user?.id || '';
     const botCleanJid = botFullId ? botFullId.split(':')[0] + '@s.whatsapp.net' : '';
     const botPhone = botCleanJid.split('@')[0];
     const botLid = sock.user?.lid ? sock.user.lid.split(':')[0] + '@lid' : '';
     const botLidNum = botLid ? botLid.split('@')[0] : '';
 
+    // Si el bot fue expulsado o salió del grupo -> auto-eliminar de la base de datos
+    if (update.action === 'remove') {
+      const isBotRemoved = update.participants.some(
+        (p) => (botPhone && p.includes(botPhone)) || (botLidNum && p.includes(botLidNum))
+      );
+      if (isBotRemoved) {
+        const groupJid = update.id;
+        console.warn(`🛡️ [Guardrails] Bot expulsado/removido del grupo ${groupJid}. Eliminado automáticamente de grupos autorizados.`);
+        guardrailsService.deauthorizeGroup(groupJid);
+      }
+      return;
+    }
+
+    if (update.action !== 'add') return;
+
     const isBotAdded = update.participants.some(
       (p) => (botPhone && p.includes(botPhone)) || (botLidNum && p.includes(botLidNum))
     );
+
 
     if (isBotAdded) {
       const groupJid = update.id;

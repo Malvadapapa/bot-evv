@@ -14,7 +14,9 @@ export interface SchedulerTargetAdapter {
   getTargetGroupJids?(): string[];
   getGroupParticipants?(groupJid: string): Promise<string[]>;
   getBotCleanJid(): string;
+  deauthorizeGroup?(groupJid: string): void;
 }
+
 
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
@@ -97,7 +99,13 @@ export class SchedulerService {
           });
           this.reminderService.markAsSent(reminder.id);
         } catch (e: any) {
-          console.error(`❌ [Scheduler] Error entregando recordatorio ${reminder.id}:`, e?.message || e);
+          const errMsg = e?.message || String(e);
+          console.error(`❌ [Scheduler] Error entregando recordatorio ${reminder.id}:`, errMsg);
+          if (errMsg.includes('forbidden') || errMsg.includes('403')) {
+            console.warn(`⚠️ [Scheduler] Grupo ${reminder.groupJid} no permite mensajes (forbidden/expulsado). Eliminado automáticamente de la base de datos.`);
+            this.adapter.deauthorizeGroup?.(reminder.groupJid);
+            this.reminderService.markAsSent(reminder.id);
+          }
         }
       }
     } catch (err: any) {
@@ -161,10 +169,11 @@ export class SchedulerService {
             } catch (groupErr: any) {
               const errMsg = groupErr?.message || String(groupErr);
               console.error(`❌ [Scheduler] Error enviando mensaje matutino a ${targetGroupJid}:`, errMsg);
-              // Si el grupo es forbidden (código 403), registrar el job para no bloquear ni reintentar infinitamente hoy
+              // Si el grupo es forbidden (código 403), registrar el job y auto-eliminarlo de la base de datos
               if (errMsg.includes('forbidden') || errMsg.includes('403')) {
-                console.warn(`⚠️ [Scheduler] Grupo ${targetGroupJid} no permite mensajes (forbidden). Omitiendo por hoy.`);
+                console.warn(`⚠️ [Scheduler] Grupo ${targetGroupJid} no permite mensajes (forbidden/expulsado). Eliminado automáticamente de la base de datos.`);
                 this.jobExecutionRepo.recordJobExecution(jobKey, targetGroupJid);
+                this.adapter.deauthorizeGroup?.(targetGroupJid);
               }
             }
           }
@@ -186,7 +195,12 @@ export class SchedulerService {
               }
             }
           } catch (bdayErr: any) {
-            console.error(`❌ [Scheduler] Error enviando aviso de cumpleaños a ${targetGroupJid}:`, bdayErr?.message || bdayErr);
+            const errMsg = bdayErr?.message || String(bdayErr);
+            console.error(`❌ [Scheduler] Error enviando aviso de cumpleaños a ${targetGroupJid}:`, errMsg);
+            if (errMsg.includes('forbidden') || errMsg.includes('403')) {
+              console.warn(`⚠️ [Scheduler] Grupo ${targetGroupJid} no permite mensajes (forbidden/expulsado). Eliminado automáticamente de la base de datos.`);
+              this.adapter.deauthorizeGroup?.(targetGroupJid);
+            }
           }
         }
       }
@@ -212,10 +226,16 @@ export class SchedulerService {
               }
             }
           } catch (inacErr: any) {
-            console.error(`❌ [Scheduler] Error en evaluación de inactividad para ${targetGroupJid}:`, inacErr?.message || inacErr);
+            const errMsg = inacErr?.message || String(inacErr);
+            console.error(`❌ [Scheduler] Error en evaluación de inactividad para ${targetGroupJid}:`, errMsg);
+            if (errMsg.includes('forbidden') || errMsg.includes('403')) {
+              console.warn(`⚠️ [Scheduler] Grupo ${targetGroupJid} no permite mensajes (forbidden/expulsado). Eliminado automáticamente de la base de datos.`);
+              this.adapter.deauthorizeGroup?.(targetGroupJid);
+            }
           }
         }
       }
+
     } catch (err: any) {
       console.error(`❌ [SchedulerService] Error en tick:`, err?.message || err);
     } finally {

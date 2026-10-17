@@ -399,6 +399,30 @@ export class CommandService {
           };
         }
 
+        if (sub === 'grupos' || sub === 'groups') {
+          const groups = this.guardrailsService.getAllAuthorizedGroups();
+          if (groups.length === 0) {
+            return { handled: true, replyText: '📋 No hay grupos autorizados registrados en la base de datos.' };
+          }
+          const list = groups.map((g, i) => `${i + 1}. *${g.groupName}*\n   🆔 \`${g.groupJid}\``).join('\n\n');
+          return {
+            handled: true,
+            replyText: `📋 *GRUPOS AUTORIZADOS ACTIVOS (${groups.length}):*\n---------------------------------------\n${list}`
+          };
+        }
+
+        if (sub === 'desautorizar' || sub === 'deauth') {
+          const targetJid = args[1]?.trim() || (groupJid.endsWith('@g.us') ? groupJid : '');
+          if (!targetJid || !targetJid.endsWith('@g.us')) {
+            return { handled: true, replyText: '⚠️ Uso: */admin desautorizar <JID_del_grupo>* (ej: /admin desautorizar 120363...@g.us)' };
+          }
+          this.guardrailsService.deauthorizeGroup(targetJid);
+          return {
+            handled: true,
+            replyText: `🗑️ Grupo \`${targetJid}\` desautorizado y eliminado de la base de datos.`
+          };
+        }
+
         // Si se pasa directamente un teléfono (ej: /admin 5493512345678 o /admin agregar 549351...)
         const rawPhone = sub === 'agregar' || sub === 'add' ? args[1] : args[0];
         if (rawPhone && rawPhone.replace(/\D/g, '').length >= 6) {
@@ -413,16 +437,19 @@ export class CommandService {
         return {
           handled: true,
           replyText: [
-            '👑 *GESTIÓN DE ADMINISTRADORES*',
+            '👑 *GESTIÓN DE ADMINISTRADORES Y GRUPOS*',
             '---------------------------------------',
             '• */admin <teléfono>* → Designar nuevo administrador.',
             '• */admin quitar <teléfono>* → Revocar rol de admin.',
             '• */admin listar* → Ver administradores activos.',
+            '• */admin grupos* → Ver grupos autorizados.',
+            '• */admin desautorizar <JID>* → Eliminar grupo de la base de datos.',
             '---------------------------------------',
             '💡 Podés ejecutar esto en privado con el bot.'
           ].join('\n')
         };
       }
+
 
       case 'aprobar': {
         if (!this.checkAdminPermission(senderJid, senderName)) {
