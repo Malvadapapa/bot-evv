@@ -4,7 +4,20 @@ Todas las novedades, mejoras y correcciones del bot de WhatsApp para grupos.
 
 ---
 
+## [v1.2.7] - 2026-10-17
+### ✨ Novedades y Mejoras
+- **Autenticación oficial Sigastra API:** Integración de Partner Key oficial (`SIGASTRA_API_KEY`) verificada permanentemente a través del canal oficial de Telegram `@singastraevv`, permitiendo acceso continuo a las predicciones astrológicas del endpoint v1.
+- **Mecanismo anti-caídas de horóscopo:** Implementación de fallback resiliente que extrae directamente la predicción y las líneas de Amor, Trabajo y Energía desde la web pública de Sigastra ante cualquier contingencia de red o API externa.
+- **Aislamiento en pruebas unitarias de horóscopo:** Refactorización de mocks en tests de comandos y apodos para asegurar una ejecución de pruebas 100% aislada de internet.
+
+### 🔧 Correcciones
+- **Corrección de error 401 Unauthorized:** Solucionada la interrupción del comando `/h` y `/horoscopo` producida por el cambio de políticas y exigencia de Partner Key implementada por Sigastra a partir del 15 de octubre de 2026.
+- **Sincronización de inactividad de usuarios:** Ajuste en el repositorio de estadísticas para permitir marcas temporales relativas en la detección de miembros inactivos.
+
+---
+
 ## [v1.2.6] - 2026-09-29
+
 ### ✨ Novedades y Mejoras
 - **Compatibilidad con otros bots (prefijo `!`):** Mequetrefe ahora ignora por completo los mensajes y comandos que comiencen con el símbolo `!` (como `!play`, `!menu`, `!help`, `!skip`, etc.), permitiendo la convivencia limpia con otros bots de música o moderación en el grupo sin interrumpir ni intentar responder.
 - **Comandos exclusivos con barra `/`:** Todos los comandos de Mequetrefe quedan unificados y blindados para responder únicamente cuando comienzan con la barra inclinada `/` (ej: `/ayuda`, `/resumen`, `/recordar`, `/top`, `/marcar`, `/micumple`).

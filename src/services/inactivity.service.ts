@@ -119,7 +119,7 @@ export class InactivityService {
     // Buscar usuarios con más de 7 días sin hablar
     const daysThreshold = this.config.inactiveDaysThreshold ?? 7;
     const inactiveMs = daysThreshold * 24 * 60 * 60 * 1000;
-    const inactiveMembers = this.statsRepo.getInactiveMembers(groupJid, inactiveMs, 15);
+    const inactiveMembers = this.statsRepo.getInactiveMembers(groupJid, inactiveMs, 15, nowMs);
 
     const eligibleMembers = inactiveMembers.filter((m) => {
       if (m.userJid === botCleanJid) return false;

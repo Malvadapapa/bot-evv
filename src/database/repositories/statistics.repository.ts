@@ -38,9 +38,10 @@ export class StatisticsRepository {
   public getInactiveMembers(
     groupJid: string,
     thresholdMs: number,
-    limit: number = 20
+    limit: number = 20,
+    referenceTime: number = Date.now()
   ): UserActivityStat[] {
-    const cutoffTime = Date.now() - thresholdMs;
+    const cutoffTime = referenceTime - thresholdMs;
     const stmt = this.db.sqlite.prepare(`
       SELECT group_jid as groupJid, user_jid as userJid, user_name as userName,
              message_count as messageCount, last_message_at as lastMessageAt

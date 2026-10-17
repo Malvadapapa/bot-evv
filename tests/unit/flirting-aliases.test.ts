@@ -72,10 +72,19 @@ test('Flirting, Aliases & Positive Horoscope Predictions Suite', async (suite) =
     const statisticsService = new StatisticsService(statsRepo);
     const horoscopeService = new HoroscopeService(horoscopeRepo);
 
-    // Mock API de horóscopo para pruebas
-    (horoscopeService as any).fetchFromApi = async () => ({
-      text: 'Hoy la luna te favorece para encarar proyectos con total energía y decisión.'
-    });
+    // Mock de horóscopo para pruebas unitarias sin red
+    horoscopeService.getDailyHoroscope = async (sign: any, isFull?: boolean) => {
+      return horoscopeService.formatHoroscopeMessage(
+        sign,
+        {
+          sign: sign.sigastraName,
+          text: 'Hoy la luna te favorece para encarar proyectos con total energía y decisión.',
+          url: `https://sigastra.com/es/horoscopo-diario/${sign.sigastraName.toLowerCase()}`,
+          editorial: { canonical: `https://sigastra.com/es/horoscopo-diario/${sign.sigastraName.toLowerCase()}` }
+        },
+        Boolean(isFull)
+      );
+    };
 
     const commandService = new CommandService(
       summaryService,

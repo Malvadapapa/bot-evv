@@ -84,7 +84,7 @@ const birthdayService = new BirthdayService(birthdayRepo, jobExecutionRepo, aiSe
 const statisticsService = new StatisticsService(statsRepo);
 const newsService = new NewsService(newsRepo, aiService);
 const weatherService = new WeatherService();
-const horoscopeService = new HoroscopeService(horoscopeRepo, env.TIMEZONE);
+const horoscopeService = new HoroscopeService(horoscopeRepo, env.TIMEZONE, env.SIGASTRA_API_KEY);
 const inactivityService = new InactivityService(messageRepo, statsRepo, aiService, {
   thresholdMs: env.INACTIVITY_THRESHOLD_HOURS * 3600000,
   cooldownMs: env.INACTIVITY_COOLDOWN_HOURS * 3600000,

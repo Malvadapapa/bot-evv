@@ -25,7 +25,8 @@ export const ZODIAC_SIGNS: Record<string, ZodiacSignInfo> = {
 export class HoroscopeService {
   constructor(
     private horoscopeRepo: HoroscopeRepository,
-    private timezone: string = 'America/Argentina/Cordoba'
+    private timezone: string = 'America/Argentina/Cordoba',
+    private apiKey?: string
   ) {}
 
   /**
@@ -104,7 +105,7 @@ export class HoroscopeService {
 
   /**
    * Obtiene el horóscopo diario para un signo (con caché SQLite de 6 horas)
-   * Siempre consulta la versión completa (full=1) para disponer de todos los párrafos sin truncar.
+   * Consulta la versión completa (full=1) con partner key o recurre al fallback web en caso de contingencia.
    */
   public async getDailyHoroscope(sign: ZodiacSignInfo, isFull: boolean = false): Promise<string> {
     const cacheKey = 'daily_full';
@@ -120,18 +121,32 @@ export class HoroscopeService {
     }
 
     if (!parsedData) {
-      const url = `https://sigastra.com/api/v1/daily?lang=es&full=1`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 Bot-EVV/1.0' },
-        signal: AbortSignal.timeout(12000)
-      });
+      try {
+        const keyParam = this.apiKey ? `&key=${encodeURIComponent(this.apiKey)}` : '';
+        const url = `https://sigastra.com/api/v1/daily?lang=es&full=1${keyParam}`;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 Bot-EVV/1.0',
+            ...(this.apiKey ? { 'x-sigastra-key': this.apiKey } : {})
+          },
+          signal: AbortSignal.timeout(12000)
+        });
 
-      if (!response.ok) {
-        throw new Error(`Sigastra API respondió con status ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Sigastra API respondió con status ${response.status}`);
+        }
+
+        dataJson = await response.text();
+        parsedData = JSON.parse(dataJson);
+      } catch (apiErr: any) {
+        // Fallback resiliente: si la API falla o da 401, intentar extraer el signo de la web pública de Sigastra
+        try {
+          const webItem = await this.fetchSignFromWeb(sign);
+          return this.formatHoroscopeMessage(sign, webItem, isFull);
+        } catch {
+          throw apiErr;
+        }
       }
-
-      dataJson = await response.text();
-      parsedData = JSON.parse(dataJson);
 
       // Guardar en caché con vigencia de 6 horas
       this.horoscopeRepo.setCached(cacheKey, dataJson, 6 * 60 * 60 * 1000);
@@ -148,6 +163,73 @@ export class HoroscopeService {
 
     return this.formatHoroscopeMessage(sign, item, isFull);
   }
+
+  /**
+   * Extracción resiliente desde la web pública de Sigastra en caso de fallo de la API
+   */
+  public async fetchSignFromWeb(sign: ZodiacSignInfo): Promise<any> {
+    const slugMap: Record<string, string> = {
+      aries: 'aries',
+      taurus: 'tauro',
+      gemini: 'geminis',
+      cancer: 'cancer',
+      leo: 'leo',
+      virgo: 'virgo',
+      libra: 'libra',
+      scorpio: 'escorpio',
+      sagittarius: 'sagitario',
+      capricorn: 'capricornio',
+      aquarius: 'acuario',
+      pisces: 'piscis'
+    };
+    const spanishSlug = slugMap[sign.key] || sign.key;
+    const url = `https://sigastra.com/es/horoscopo-diario/${spanishSlug}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Sigastra Web respondió con status ${response.status}`);
+    }
+
+    const html = await response.text();
+    const cleanHtml = (s: string) =>
+      s
+        .replace(/<[^>]+>/g, '')
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&#39;/g, "'")
+        .trim();
+
+    const predMatch = html.match(/<h2[^>]*>Tu día de hoy<\/h2>\s*<p[^>]*>([\s\S]*?)<\/p>/i);
+    const loveMatch = html.match(/<span[^>]*>Amor<\/span>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
+    const workMatch = html.match(/<span[^>]*>Trabajo<\/span>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
+    const energyMatch = html.match(/<span[^>]*>Energía<\/span>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
+
+    if (!predMatch) {
+      throw new Error(`No se pudo extraer predicción web para ${sign.nameEs}`);
+    }
+
+    return {
+      sign: sign.sigastraName,
+      text: cleanHtml(predMatch[1]),
+      url,
+      editorial: {
+        canonical: url
+      },
+      data: {
+        loveLine: loveMatch ? cleanHtml(loveMatch[1]) : undefined,
+        workLine: workMatch ? cleanHtml(workMatch[1]) : undefined,
+        energyLine: energyMatch ? cleanHtml(energyMatch[1]) : undefined
+      }
+    };
+  }
+
 
   /**
    * Formatea el horóscopo en la plantilla corta (hasta 3 párrafos limpios) o larga (completa)

@@ -18,6 +18,7 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(['groq', 'together', 'openrouter']).default('groq'),
   AI_API_KEY: z.string().default(''),
   AI_MODEL: z.string().default('qwen/qwen3.8-27b'),
+  SIGASTRA_API_KEY: z.string().default(''),
 
   // Database & Timezone settings
   DB_PATH: z.string().default('data/bot.sqlite'),

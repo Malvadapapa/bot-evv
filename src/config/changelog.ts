@@ -12,24 +12,40 @@ export interface ReleaseNote {
 }
 
 export const CURRENT_VERSION: ReleaseNote = {
-  version: '1.2.6',
-  date: '29/09/2026',
-  title: 'Compatibilidad multi-bot y difusión de mejoras acumuladas',
-  broadcast: true,
+  version: '1.2.7',
+  date: '17/10/2026',
+  title: 'Autenticación oficial de horóscopo con Sigastra y respaldo web anti-caídas',
+  broadcast: false,
   highlights: [
-    'Compatibilidad con otros bots: Mequetrefe ignora por completo los mensajes y comandos con prefijo "!" (ej: !play, !menu, !help) dirigidos a otros bots',
-    'Comandos exclusivos con barra (/): Todos los comandos de Mequetrefe se activan únicamente con "/" (ej: /ayuda, /resumen, /recordar, /top, /micumple)',
-    'Personalidad compinche y amigable: Mascota ocurrente y simpática (sabandija mequetrefe) con humor blanco y cero hostilidad o bardeos',
-    'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas para interactuar sin saturar los chats'
+    'Autenticación oficial Sigastra API: Integración de Partner Key verificada permanentemente con canal oficial de Telegram',
+    'Mecanismo de contingencia anti-caídas: Fallback automático a extracción web pública para garantizar que el horóscopo diario funcione sin interrupciones',
+    'Soporte de configuración: Nueva variable de entorno SIGASTRA_API_KEY para gestión declarativa de credenciales astrológicas'
   ],
   fixes: [
-    'Eliminadas respuestas erróneas a otros bots: Mequetrefe ya no responde "Comando no reconocido" ante comandos con prefijo "!"',
-    'Scheduler multi-grupo resiliente: Saludos matutinos y noticias entregados con aislamiento de errores entre grupos'
+    'Solución al error 401 Unauthorized en /horoscopo y /h provocado por la nueva política de seguridad de Sigastra',
+    'Corrección de aislamiento en tests unitarios de horóscopo para ejecución offline 100% confiable',
+    'Alineación de marca temporal de inactividad de miembros con timestamp relativo en estadísticas'
   ]
 };
 
 export const CHANGELOG_HISTORY: ReleaseNote[] = [
   CURRENT_VERSION,
+  {
+    version: '1.2.6',
+    date: '29/09/2026',
+    title: 'Compatibilidad multi-bot y difusión de mejoras acumuladas',
+    highlights: [
+      'Compatibilidad con otros bots: Mequetrefe ignora por completo los mensajes y comandos con prefijo "!" (ej: !play, !menu, !help) dirigidos a otros bots',
+      'Comandos exclusivos con barra (/): Todos los comandos de Mequetrefe se activan únicamente con "/" (ej: /ayuda, /resumen, /recordar, /top, /micumple)',
+      'Personalidad compinche y amigable: Mascota ocurrente y simpática (sabandija mequetrefe) con humor blanco y cero hostilidad o bardeos',
+      'Espontaneidad optimizada: Reducción del 40% en intervenciones no solicitadas para interactuar sin saturar los chats'
+    ],
+    fixes: [
+      'Eliminadas respuestas erróneas a otros bots: Mequetrefe ya no responde "Comando no reconocido" ante comandos con prefijo "!"',
+      'Scheduler multi-grupo resiliente: Saludos matutinos y noticias entregados con aislamiento de errores entre grupos'
+    ]
+  },
+
   {
     version: '1.2.5',
     date: '29/09/2026',
